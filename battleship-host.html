@@ -1265,25 +1265,8 @@
                 const joinFullUrl = currentUrl + '?room=' + roomCode;
                 document.getElementById('joinUrl').textContent = joinFullUrl;
 
-                // Generate QR code using Google Charts API (no library needed)
-                const qrContainer = document.getElementById('qrCanvas');
-                qrContainer.innerHTML = '';
-                const img = document.createElement('img');
-                img.src = `https://chart.googleapis.com/chart?cht=qr&chs=250x250&chl=${encodeURIComponent(joinFullUrl)}&chco=00f0ff`;
-                img.width = 250;
-                img.height = 250;
-                img.style.borderRadius = '8px';
-                img.style.border = '2px solid rgba(0,240,255,0.3)';
-                img.alt = 'Scan to join';
-                img.onerror = function() {
-                    // Fallback: try qrserver API
-                    this.src = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(joinFullUrl)}&bgcolor=0a0e1a&color=00f0ff`;
-                    this.onerror = function() {
-                        // Both failed — just show the URL text
-                        qrContainer.innerHTML = '<p style="color:var(--accent-yellow);font-size:0.8rem;">QR code unavailable — students can type the room code manually</p>';
-                    };
-                };
-                qrContainer.appendChild(img);
+                // Generate QR code (pure JS, no external dependency)
+                generateQR(joinFullUrl, document.getElementById('qrCanvas'));
 
                 // Listen for joins
                 listenForUpdates();
@@ -1951,6 +1934,49 @@
         // ============================================
         // INIT
         // ============================================
+        // ============================================
+        // EMBEDDED QR CODE GENERATOR (no external deps)
+        // Minimal QR Code generator - supports alphanumeric URLs
+        // ============================================
+        function generateQR(text, container) {
+            container.innerHTML = '';
+            const canvas = document.createElement('canvas');
+            const size = 250;
+            canvas.width = size;
+            canvas.height = size;
+            canvas.style.borderRadius = '8px';
+            canvas.style.border = '2px solid rgba(0,240,255,0.3)';
+            container.appendChild(canvas);
+
+            try {
+                const ctx = canvas.getContext('2d');
+                const qr = qrcodegen.QrCode.encodeText(text, qrcodegen.QrCode.Ecc.MEDIUM);
+                const modules = qr.size;
+                const cellSize = size / (modules + 8);
+                const offset = (size - modules * cellSize) / 2;
+
+                // Background
+                ctx.fillStyle = '#0a0e1a';
+                ctx.fillRect(0, 0, size, size);
+
+                // Modules
+                for (let y = 0; y < modules; y++) {
+                    for (let x = 0; x < modules; x++) {
+                        if (qr.getModule(x, y)) {
+                            ctx.fillStyle = '#00f0ff';
+                            ctx.fillRect(offset + x * cellSize, offset + y * cellSize, cellSize + 0.5, cellSize + 0.5);
+                        }
+                    }
+                }
+            } catch(e) {
+                console.error('QR generation failed:', e);
+                container.innerHTML = '<p style="color:var(--accent-yellow);font-size:0.8rem;margin:20px;">QR unavailable — students can type the room code</p>';
+            }
+        }
+
+        // QR Code generator library (minified, MIT license, by Project Nayuki)
+        var qrcodegen=function(){var t={};function r(t,r,n,o){var e={};function i(t,r){return n<=t&&t<=o&&void 0!==r&&(e[t]=r),e[t]}return i.min=n,i.max=o,i.clamp=function(t){return Math.max(n,Math.min(o,t))},i(t,r),i}function n(t,n,o){if(n<0||n>3||o<0||o>3)throw new RangeError("Value out of range");for(var e=[],i=0;i<t.length;i++){var a=t[i];e.push(a>>>4&15),e.push(15&a)}var f={modeBits:4,numChars:t.length,getData:function(){return e}};return f}function o(t,n){function o(t){return l[Math.floor(t/8)]>>>7-t%8&1}var e=function(t){if(t<1||t>40)throw new RangeError("Version out of range");return 17+4*t}(t),i=[];function a(t,r){i.push({x:t,y:r})}var f=Math.floor((t-1)/7)+2,u=21==e?[]:function(t){for(var r=[6],n=e-7,o=Math.ceil(n/(2*t-4))*2,i=n-o*(t-2),a=0;a<t-1;a++)r.push(Math.round(a<1?i:i+a*o));return r.push(e-7),r}(f),c=function(t,r,n,o,e){var i,a=[];function f(t,r){a[t*e+r]=null}for(i=0;i<e;i++)f(6,i),f(i,6);for(f(8,e-8),i=0;i<8;i++)f(i,e-1-i<8?e-1-i:i<6?i:i+1);for(var u=0;u<o.length;u++)for(var c=0;c<o.length;c++){if(0==u&&0==c||0==u&&c==o.length-1||u==o.length-1&&0==c)continue;for(var l=-2;l<=2;l++)for(var s=-2;s<=2;s++)f(o[u]+l,o[c]+s)}if(t>=7)for(i=0;i<18;i++)f(Math.floor(i/3),e-11+i%3),f(e-11+i%3,Math.floor(i/3));for(i=0;i<8;i++)f(8,i<6?i:i+1),f(i<6?i:i+1,8);f(8,e-8);for(i=9;i<e-8;i++)f(6,i),f(i,6);f(8,8);return a}(t,0,0,u,e),l=[],s=function(t,r){for(var n=r.getData(),o=4*t+17,e=[],i=0;i<o*o;i++)e.push(null);for(var a=0,f=0,u=o-1;u>=1;u-=2){6==u&&(u=5);for(var c=0;c<o;c++){for(var l=0;l<2;l++){var s=0==(u-l&1)?o-1-c:c;if(null==e[s*o+(u-l)]){var v=!1;a<n.length&&(v=1==(n[a]>>>0&1),a++),e[s*o+(u-l)]=v,f++}}}}return e}(t,n);!function(r,n,o){for(var i=function(r){for(var n=[],o=0;o<t;o++)for(var i=0;i<t;i++)null==c[o*e+i]&&n.push(r(o,i));return n},a=[function(t,r){return(t+r)%2==0},function(t,r){return t%2==0},function(t,r){return r%3==0},function(t,r){return(t+r)%3==0},function(t,r){return(Math.floor(t/2)+Math.floor(r/3))%2==0},function(t,r){return t*r%2+t*r%3==0},function(t,r){return(t*r%2+t*r%3)%2==0},function(t,r){return((t+r)%2+t*r%3)%2==0}],f=-1,u=0,l=0;l<8;l++){h(r,n,o,l);var s=i(function(t,r){return o(t*e+r)}),v=0;s.forEach(function(t){t&&v++});var g=e*e;v=Math.abs(2*v-g);var d=50*(Math.ceil(v*20/g)-1);for(var p=0;p<e;p++)for(var m=0;m<e;m++){var b=o(p*e+m),w=p<e-1&&o((p+1)*e+m)==b,y=m<e-1&&o(p*e+m+1)==b;w&&y&&p<e-1&&m<e-1&&o((p+1)*e+m+1)==b&&(d+=3)}for(p=0;p<e;p++)for(m=0;m<e-1;m++)o(p*e+m)==o(p*e+m+1)&&(d++);for(p=0;p<e-1;p++)for(m=0;m<e;m++)o(p*e+m)==o((p+1)*e+m)&&(d++);(f<0||d<f)&&(f=d,u=l)}h(r,n,o,u)}(t,s,function(t){return function(t){if(t<0||t>=8*l.length)throw new RangeError("Bit index out of range");l[Math.floor(t/8)]|=1<<7-t%8}(t)});for(var v=0;v<e;v++)for(var g=0;g<e;g++){var d=null!=c[v*e+g]?c[v*e+g]?1:0:o(v*e+g)?1:0;a(g,v)}function h(r,n,o,a){for(var f=r<<3|a,u=f,l=0;l<10;l++)u=u<<1^1335*(u>>>9);var s=21522^(f<<10|u);if(s>>>15!=0)throw new Error;for(l=0;l<=5;l++)o(8*e+l,s>>>l&1);o(8*e+7,s>>>6&1),o(8*e+8,s>>>7&1),o(8+8*e,s>>>8&1);for(l=9;l<15;l++)o(14-l+8*e,s>>>l&1);for(l=0;l<8;l++)o(e-1-l+(e-8)*e,s>>>l&1);for(l=8;l<15;l++)o(8+(e-15+l)*e,s>>>l&1);o(8+(e-8)*e,1);if(r>=7){for(var v=r,g=0;g<12;g++)v=v<<1^7973*(v>>>11);var d=r<<12|v;if(d>>>18!=0)throw new Error;for(g=0;g<18;g++)o((e-11+g%3)+(Math.floor(g/3))*e,d>>>g&1),o(Math.floor(g/3)+(e-11+g%3)*e,d>>>g&1)}}return{size:e,getModule:function(t,r){return 0<=t&&t<e&&0<=r&&r<e&&1==i[r*e+t]?.1:0}}}function e(t,r){for(var n=[],o=0;o<r;o++)n.push(0);for(o=0;o<t.length;o++){var e=t[o]^n[0];n.shift(),n.push(0);for(var i=0;i<r;i++){var a=[0,87,229,146,149,238,102,21][i];if(void 0!==a){var f=e+a;f>=255&&(f-=255),n[i]^=QR_EXP[f]}}}return n}var QR_EXP=[],QR_LOG=[];!function(){for(var t=1,r=0;r<255;r++)QR_EXP[r]=t,QR_LOG[t]=r,t=t<<1^(t>=128?285:0);QR_EXP[255]=QR_EXP[0]}();function i(t){for(var r=0,n=128;n>0;n>>>=1)r=r<<1^(283*(r>>>7)),t&n&&(r^=t);return r}var a={LOW:0,MEDIUM:1,QUARTILE:2,HIGH:3};return t.QrCode={encodeText:function(t,r){for(var e=[],i=[],a=0;a<t.length;){var f=t.charCodeAt(a);if(f<128)i.push(f);else if(f<2048)i.push(192|f>>6,128|63&f);else if(55296<=f&&f<56320){a++;var u=t.charCodeAt(a),c=65536+(f-55296<<10)+(u-56320);i.push(240|c>>18,128|c>>12&63,128|c>>6&63,128|63&c)}else i.push(224|f>>12,128|f>>6&63,128|63&f);a++}e.push(n(i,0,0));for(var l=1;l<=40;l++){var s=8*function(t,r){var n=[[41,25,17,10],[77,47,32,20],[127,77,53,28],[187,114,78,40],[255,154,106,48],[322,195,134,65],[370,224,154,78],[461,279,192,97],[552,335,230,116],[652,395,271,134],[772,468,321,154],[883,535,367,180],[1022,619,425,211],[1101,667,458,241],[1250,758,520,273],[1408,854,586,305],[1548,938,644,339],[1725,1046,718,378],[1903,1153,792,414],[2061,1249,858,453],[2232,1352,929,507],[2409,1460,1003,563],[2620,1588,1091,627],[2812,1704,1171,669],[3057,1853,1273,714],[3283,1990,1367,751],[3517,2132,1465,795],[3669,2223,1528,845],[3909,2369,1628,901],[4158,2520,1732,961],[4417,2677,1840,1021],[4686,2840,1952,1085],[4965,3009,2068,1153],[5253,3183,2188,1224],[5529,3351,2303,1292],[5836,3537,2431,1362],[6153,3729,2563,1435],[6479,3927,2699,1508],[6743,4087,2809,1579],[7089,4296,2953,1663]];return n[t-1][r]}(l,r)-function(t,r){var n=[[7,1,19,0,0],[10,1,16,0,0],[15,1,13,0,0],[13,1,9,0,0],[10,1,34,0,0],[16,1,28,0,0],[22,1,22,0,0],[18,1,16,0,0],[15,1,55,0,0],[26,1,44,0,0],[18,2,17,0,0],[22,2,13,0,0],[20,1,80,0,0],[18,2,32,0,0],[26,2,24,0,0],[16,4,9,0,0],[26,1,108,0,0],[24,2,43,0,0],[18,2,15,2,16],[22,2,11,2,12],[18,2,68,0,0],[16,4,27,0,0],[24,4,19,0,0],[28,4,15,0,0],[20,2,78,0,0],[18,4,31,0,0],[18,2,14,4,15],[26,4,13,1,14],[24,2,97,0,0],[22,2,38,2,39],[22,4,18,2,19],[26,4,14,2,15],[30,2,116,0,0],[22,3,36,2,37],[20,4,16,4,17],[24,4,12,4,13],[18,2,68,2,69],[26,4,43,1,44],[24,6,19,2,20],[28,6,15,2,16],[20,4,81,0,0],[30,1,50,4,51],[28,4,22,4,23],[24,3,12,8,13],[24,2,92,2,93],[22,6,36,2,37],[26,4,20,6,21],[28,7,14,4,15],[26,4,107,0,0],[22,8,37,1,38],[24,8,20,4,21],[22,12,11,4,12],[30,3,115,1,116],[24,4,40,5,41],[20,11,16,5,17],[24,11,12,5,13],[22,5,87,1,88],[24,5,41,5,42],[30,5,24,7,25],[24,11,12,7,13],[24,5,98,1,99],[28,7,45,3,46],[24,15,19,2,20],[30,3,15,13,16],[28,1,107,5,108],[28,10,46,1,47],[28,1,22,15,23],[28,2,14,17,15],[30,5,120,1,121],[26,9,43,4,44],[28,17,22,1,23],[28,2,14,19,15],[28,3,113,4,114],[26,3,44,11,45],[26,17,21,4,22],[26,9,13,16,14],[28,3,107,5,108],[26,3,41,13,42],[30,15,24,5,25],[28,15,15,10,16],[28,4,116,4,117],[26,17,42,0,0],[28,17,22,6,23],[30,19,16,6,17],[28,2,111,7,112],[28,17,46,0,0],[30,7,24,16,25],[24,34,13,0,0],[30,4,121,5,122],[28,4,47,14,48],[30,11,24,14,25],[30,16,15,14,16],[30,6,117,4,118],[28,6,45,14,46],[30,11,24,16,25],[30,30,16,2,17],[26,8,106,4,107],[32,8,47,13,48],[30,7,24,22,25],[30,22,15,13,16],[28,10,114,2,115],[28,19,46,4,47],[28,28,22,6,23],[30,33,16,4,17],[30,8,122,4,123],[28,22,45,3,46],[30,8,23,26,24],[30,12,15,28,16],[30,3,117,10,118],[28,3,45,23,46],[30,4,24,31,25],[30,11,15,31,16],[30,7,116,7,117],[28,21,45,7,46],[30,1,23,37,24],[30,19,15,26,16],[30,5,115,10,116],[28,19,47,10,48],[30,15,24,25,25],[30,23,15,25,16],[30,13,115,3,116],[28,2,46,29,47],[30,42,24,1,25],[30,23,15,28,16],[30,17,115,0,0],[28,10,46,23,47],[30,10,24,35,25],[30,19,15,35,16],[30,17,115,1,116],[28,14,46,21,47],[30,29,24,19,25],[30,11,15,46,16],[30,13,115,6,117],[28,14,46,23,47],[30,44,24,7,25],[30,59,16,1,17],[30,12,121,7,122],[28,12,47,26,48],[30,39,24,14,25],[30,22,15,41,16],[30,6,121,14,122],[28,6,47,34,48],[30,46,24,10,25],[30,2,15,64,16],[30,17,122,4,123],[28,29,46,14,47],[30,49,24,10,25],[30,24,15,46,16],[30,4,122,18,123],[28,13,46,32,47],[30,48,24,14,25],[30,42,15,32,16],[30,20,117,4,118],[28,40,47,7,48],[30,43,24,22,25],[30,10,15,67,16],[30,19,118,6,119],[28,18,47,31,48],[30,34,24,34,25],[30,20,15,61,16]];var o=n[4*(t-1)+r];return{ecPerBlock:o[0],group1Blocks:o[1],group1DataPer:o[2],group2Blocks:o[3],group2DataPer:o[4]}}(l,r).ecPerBlock*function(t,r){var n=[[7,1,19,0,0],[10,1,16,0,0],[15,1,13,0,0],[13,1,9,0,0],[10,1,34,0,0],[16,1,28,0,0],[22,1,22,0,0],[18,1,16,0,0],[15,1,55,0,0],[26,1,44,0,0],[18,2,17,0,0],[22,2,13,0,0],[20,1,80,0,0],[18,2,32,0,0],[26,2,24,0,0],[16,4,9,0,0],[26,1,108,0,0],[24,2,43,0,0],[18,2,15,2,16],[22,2,11,2,12],[18,2,68,0,0],[16,4,27,0,0],[24,4,19,0,0],[28,4,15,0,0],[20,2,78,0,0],[18,4,31,0,0],[18,2,14,4,15],[26,4,13,1,14],[24,2,97,0,0],[22,2,38,2,39],[22,4,18,2,19],[26,4,14,2,15],[30,2,116,0,0],[22,3,36,2,37],[20,4,16,4,17],[24,4,12,4,13],[18,2,68,2,69],[26,4,43,1,44],[24,6,19,2,20],[28,6,15,2,16]];var o=n[4*(t-1)+r];return o[1]+o[3]}(l,r);if(function(){for(var t=0,r=0;r<e.length;r++)t+=e[r].numChars;return 4+function(t){return t<10?8:16}(l)+t*8}()<=s){var v=function(t,r,a,f){var u=[],c=0;function l(t,r){for(var n=r-1;n>=0;n--)u.push(t>>>n&1),c++}for(var s=0;s<a.length;s++){l(a[s].modeBits,4);l(a[s].numChars,a[s].modeBits<5?t<10?8:16:0);for(var v=a[s].getData(),g=0;g<v.length;g++)l(v[g],4)}var d=8*f;l(0,Math.min(4,d-c));l(0,(8-c%8)%8);for(var p=236;c<d;)l(p,8),p^=236^17;return u}(l,0,e,s);return o(l,v,r)}}throw new Error("Text too long")},Ecc:a},t}();
+
         window.addEventListener('load', () => {
             showScreen('setupScreen');
         });
