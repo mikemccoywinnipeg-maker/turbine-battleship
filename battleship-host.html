@@ -950,6 +950,7 @@
                 <h2>📡 Awaiting Crew</h2>
                 <p style="color:var(--text-secondary); margin-bottom:20px;">Students join at:</p>
                 <div class="qr-area" id="qrArea">
+                    <canvas id="qrCanvas"></canvas>
                     <div class="join-url" id="joinUrl"></div>
                 </div>
                 <div class="players-joined">
@@ -1261,7 +1262,28 @@
 
                 // Set join URL
                 const currentUrl = window.location.href.replace('host.html', 'student.html');
-                document.getElementById('joinUrl').textContent = currentUrl + '?room=' + roomCode;
+                const joinFullUrl = currentUrl + '?room=' + roomCode;
+                document.getElementById('joinUrl').textContent = joinFullUrl;
+
+                // Generate QR code using Google Charts API (no library needed)
+                const qrContainer = document.getElementById('qrCanvas');
+                qrContainer.innerHTML = '';
+                const img = document.createElement('img');
+                img.src = `https://chart.googleapis.com/chart?cht=qr&chs=250x250&chl=${encodeURIComponent(joinFullUrl)}&chco=00f0ff`;
+                img.width = 250;
+                img.height = 250;
+                img.style.borderRadius = '8px';
+                img.style.border = '2px solid rgba(0,240,255,0.3)';
+                img.alt = 'Scan to join';
+                img.onerror = function() {
+                    // Fallback: try qrserver API
+                    this.src = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(joinFullUrl)}&bgcolor=0a0e1a&color=00f0ff`;
+                    this.onerror = function() {
+                        // Both failed — just show the URL text
+                        qrContainer.innerHTML = '<p style="color:var(--accent-yellow);font-size:0.8rem;">QR code unavailable — students can type the room code manually</p>';
+                    };
+                };
+                qrContainer.appendChild(img);
 
                 // Listen for joins
                 listenForUpdates();
@@ -1286,9 +1308,12 @@
         function updateLobby() {
             if (gameData.phase !== 'lobby') return;
 
-            const t1Joined = gameData.team1Joined ? Object.keys(gameData.team1Joined).length : 0;
-            const t2Joined = gameData.team2Joined ? Object.keys(gameData.team2Joined).length : 0;
-            const total = t1Joined + t2Joined;
+            const t1JoinedObj = gameData.team1Joined || {};
+            const t2JoinedObj = gameData.team2Joined || {};
+            // Filter out the _init placeholder
+            const t1Names = Object.entries(t1JoinedObj).filter(([k,v]) => k !== '_init').map(([k,v]) => v);
+            const t2Names = Object.entries(t2JoinedObj).filter(([k,v]) => k !== '_init').map(([k,v]) => v);
+            const total = t1Names.length + t2Names.length;
             const expected = (gameData.team1Players || []).length + (gameData.team2Players || []).length;
 
             document.getElementById('joinedCount').textContent = total;
@@ -1299,8 +1324,8 @@
             container.innerHTML = '';
 
             const allJoined = [
-                ...Object.values(gameData.team1Joined || {}).map(n => ({name: n, team: 1})),
-                ...Object.values(gameData.team2Joined || {}).map(n => ({name: n, team: 2}))
+                ...t1Names.map(n => ({name: n, team: 1})),
+                ...t2Names.map(n => ({name: n, team: 2}))
             ];
 
             allJoined.forEach(p => {
