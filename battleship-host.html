@@ -948,10 +948,14 @@
         <div class="setup-screen" id="lobbyScreen">
             <div class="setup-container" style="text-align:center;">
                 <h2>📡 Awaiting Crew</h2>
-                <p style="color:var(--text-secondary); margin-bottom:20px;">Students join at:</p>
+                <p style="color:var(--text-secondary); margin-bottom:20px;">Scan QR code to join</p>
                 <div class="qr-area" id="qrArea">
                     <div id="qrCanvas" style="display:flex;justify-content:center;"></div>
-                    <div class="join-url" id="joinUrl"></div>
+                    <div style="margin-top:15px;font-family:'Orbitron',sans-serif;font-size:1.8rem;letter-spacing:8px;color:var(--accent-cyan);text-shadow:0 0 20px rgba(0,240,255,0.4);" id="lobbyRoomCode"></div>
+                    <button onclick="document.getElementById('joinUrlWrap').style.display=document.getElementById('joinUrlWrap').style.display==='none'?'block':'none'" style="margin-top:10px;background:none;border:1px solid rgba(255,255,255,0.1);color:var(--text-secondary);padding:4px 14px;border-radius:4px;font-size:0.7rem;cursor:pointer;font-family:'Share Tech Mono',monospace;">Show URL</button>
+                    <div id="joinUrlWrap" style="display:none;margin-top:8px;">
+                        <div class="join-url" id="joinUrl"></div>
+                    </div>
                 </div>
                 <div class="players-joined">
                     <span id="joinedCount">0</span> / <span id="totalCount">0</span> crew members aboard
@@ -3556,6 +3560,7 @@ var qrcode = function() {
                 // Show room code
                 document.getElementById('roomCodeDisplay').style.display = 'inline-block';
                 document.getElementById('roomCodeText').textContent = roomCode;
+                document.getElementById('lobbyRoomCode').textContent = roomCode;
                 document.getElementById('totalCount').textContent = names.length;
 
                 // Switch to lobby
