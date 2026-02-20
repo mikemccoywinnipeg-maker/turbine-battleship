@@ -1,0 +1,1934 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Turbine Battleship — Host</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #0a0e1a;
+            --bg-panel: #111827;
+            --bg-card: #1a2236;
+            --accent-cyan: #00f0ff;
+            --accent-orange: #ff6b2b;
+            --accent-red: #ff2d55;
+            --accent-green: #00e676;
+            --accent-yellow: #ffd600;
+            --team1: #00b4d8;
+            --team1-glow: rgba(0,180,216,0.3);
+            --team2: #ff6b2b;
+            --team2-glow: rgba(255,107,43,0.3);
+            --grid-line: rgba(0,240,255,0.15);
+            --text-primary: #e8eaed;
+            --text-secondary: #8892a4;
+            --hit-color: #ff2d55;
+            --miss-color: #334155;
+            --sunk-color: #9d174d;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Rajdhani', sans-serif;
+            background: var(--bg-dark);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* ============ ANIMATED BACKGROUND ============ */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background:
+                radial-gradient(ellipse at 20% 50%, rgba(0,180,216,0.08) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 50%, rgba(255,107,43,0.08) 0%, transparent 50%),
+                radial-gradient(ellipse at 50% 0%, rgba(0,240,255,0.05) 0%, transparent 40%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* ============ SCAN LINE EFFECT ============ */
+        body::after {
+            content: '';
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: repeating-linear-gradient(
+                0deg,
+                transparent,
+                transparent 2px,
+                rgba(0,240,255,0.015) 2px,
+                rgba(0,240,255,0.015) 4px
+            );
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        .app-container {
+            position: relative;
+            z-index: 2;
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 15px;
+        }
+
+        /* ============ HEADER ============ */
+        .header {
+            text-align: center;
+            padding: 10px 0 15px;
+        }
+
+        .header h1 {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 2.4rem;
+            font-weight: 900;
+            letter-spacing: 6px;
+            text-transform: uppercase;
+            background: linear-gradient(135deg, var(--accent-cyan), #ffffff, var(--accent-orange));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: none;
+            margin-bottom: 4px;
+        }
+
+        .header .subtitle {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            letter-spacing: 4px;
+        }
+
+        .room-code-display {
+            display: inline-block;
+            margin-top: 8px;
+            padding: 6px 24px;
+            background: var(--bg-card);
+            border: 1px solid var(--accent-cyan);
+            border-radius: 4px;
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.3rem;
+            letter-spacing: 8px;
+            color: var(--accent-cyan);
+            text-shadow: 0 0 10px rgba(0,240,255,0.5);
+        }
+
+        /* ============ STATUS BAR ============ */
+        .status-bar {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 30px;
+            padding: 10px 0;
+            margin-bottom: 10px;
+        }
+
+        .turn-indicator {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.4rem;
+            font-weight: 700;
+            padding: 8px 30px;
+            border-radius: 4px;
+            letter-spacing: 3px;
+            transition: all 0.4s ease;
+        }
+
+        .turn-indicator.team1 {
+            color: var(--team1);
+            border: 2px solid var(--team1);
+            box-shadow: 0 0 20px var(--team1-glow), inset 0 0 20px var(--team1-glow);
+        }
+
+        .turn-indicator.team2 {
+            color: var(--team2);
+            border: 2px solid var(--team2);
+            box-shadow: 0 0 20px var(--team2-glow), inset 0 0 20px var(--team2-glow);
+        }
+
+        .phase-label {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 0.9rem;
+            color: var(--accent-yellow);
+            letter-spacing: 2px;
+            animation: blink 1.5s ease-in-out infinite;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        /* ============ MAIN GRID AREA ============ */
+        .battle-area {
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
+            gap: 20px;
+            align-items: start;
+        }
+
+        .team-section {
+            background: var(--bg-panel);
+            border-radius: 8px;
+            padding: 15px;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .team-section.team1-section { border-top: 3px solid var(--team1); }
+        .team-section.team2-section { border-top: 3px solid var(--team2); }
+
+        .team-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .team-name {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.1rem;
+            font-weight: 700;
+            letter-spacing: 2px;
+        }
+
+        .team1-section .team-name { color: var(--team1); }
+        .team2-section .team-name { color: var(--team2); }
+
+        .ships-remaining {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+
+        .ships-remaining span {
+            color: var(--accent-green);
+            font-weight: 700;
+        }
+
+        /* ============ BATTLESHIP GRID ============ */
+        .grid-container {
+            display: inline-grid;
+            grid-template-columns: 30px repeat(10, 1fr);
+            grid-template-rows: 30px repeat(10, 1fr);
+            gap: 2px;
+            width: 100%;
+            aspect-ratio: 11/11;
+        }
+
+        .grid-label {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+        }
+
+        .grid-cell {
+            background: rgba(0,240,255,0.03);
+            border: 1px solid var(--grid-line);
+            border-radius: 2px;
+            position: relative;
+            cursor: default;
+            transition: all 0.3s ease;
+            aspect-ratio: 1;
+        }
+
+        .grid-cell.hit {
+            background: var(--hit-color);
+            border-color: var(--hit-color);
+            box-shadow: 0 0 8px rgba(255,45,85,0.5);
+            animation: hitPulse 0.5s ease;
+        }
+
+        .grid-cell.hit::after {
+            content: '✕';
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%,-50%);
+            font-size: 1.2rem;
+            font-weight: 900;
+            color: white;
+        }
+
+        .grid-cell.miss {
+            background: var(--miss-color);
+            border-color: rgba(255,255,255,0.1);
+        }
+
+        .grid-cell.miss::after {
+            content: '•';
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%,-50%);
+            font-size: 1.4rem;
+            color: rgba(255,255,255,0.4);
+        }
+
+        .grid-cell.sunk {
+            background: var(--sunk-color);
+            border-color: var(--sunk-color);
+            box-shadow: 0 0 10px rgba(157,23,77,0.6);
+        }
+
+        .grid-cell.sunk::after {
+            content: '✕';
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%,-50%);
+            font-size: 1.2rem;
+            font-weight: 900;
+            color: white;
+        }
+
+        .grid-cell.ship {
+            background: rgba(0,240,255,0.12);
+            border-color: rgba(0,240,255,0.3);
+        }
+
+        @keyframes hitPulse {
+            0% { transform: scale(1.3); }
+            100% { transform: scale(1); }
+        }
+
+        /* ============ CENTER PANEL ============ */
+        .center-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            min-width: 320px;
+            max-width: 400px;
+        }
+
+        /* ============ QUESTION CARD ============ */
+        .question-card {
+            background: var(--bg-card);
+            border: 1px solid rgba(0,240,255,0.2);
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .question-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: -100%;
+            width: 100%; height: 3px;
+            background: linear-gradient(90deg, transparent, var(--accent-cyan), transparent);
+            animation: scanLine 3s linear infinite;
+        }
+
+        @keyframes scanLine {
+            0% { left: -100%; }
+            100% { left: 100%; }
+        }
+
+        .question-category {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--accent-cyan);
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            margin-bottom: 10px;
+        }
+
+        .question-text {
+            font-size: 1.1rem;
+            font-weight: 600;
+            line-height: 1.5;
+            margin-bottom: 15px;
+            min-height: 60px;
+        }
+
+        .answer-options {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
+        .answer-option {
+            padding: 10px;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 4px;
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 0.9rem;
+            font-weight: 600;
+            text-align: left;
+            transition: all 0.3s ease;
+        }
+
+        .answer-option.correct {
+            background: rgba(0,230,118,0.15);
+            border-color: var(--accent-green);
+            color: var(--accent-green);
+        }
+
+        .answer-option.wrong {
+            background: rgba(255,45,85,0.1);
+            border-color: var(--accent-red);
+            color: var(--accent-red);
+            opacity: 0.6;
+        }
+
+        /* ============ TIMER ============ */
+        .timer-bar-container {
+            width: 100%;
+            height: 6px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 3px;
+            margin-top: 12px;
+            overflow: hidden;
+        }
+
+        .timer-bar {
+            height: 100%;
+            background: var(--accent-cyan);
+            border-radius: 3px;
+            transition: width 1s linear, background 0.3s ease;
+            width: 100%;
+        }
+
+        .timer-bar.warning { background: var(--accent-yellow); }
+        .timer-bar.danger { background: var(--accent-red); }
+
+        /* ============ RESPONSE TRACKER ============ */
+        .response-tracker {
+            background: var(--bg-card);
+            border: 1px solid rgba(255,255,255,0.05);
+            border-radius: 8px;
+            padding: 15px;
+        }
+
+        .response-tracker h3 {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            letter-spacing: 2px;
+            margin-bottom: 10px;
+        }
+
+        .response-dots {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .response-dot {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.6rem;
+            font-weight: 700;
+            font-family: 'Share Tech Mono', monospace;
+            border: 2px solid rgba(255,255,255,0.1);
+            background: rgba(255,255,255,0.03);
+            transition: all 0.3s ease;
+        }
+
+        .response-dot.answered-correct {
+            border-color: var(--accent-green);
+            background: rgba(0,230,118,0.15);
+            color: var(--accent-green);
+        }
+
+        .response-dot.answered-wrong {
+            border-color: var(--accent-red);
+            background: rgba(255,45,85,0.15);
+            color: var(--accent-red);
+        }
+
+        .response-dot.waiting {
+            animation: dotPulse 1.5s ease infinite;
+        }
+
+        @keyframes dotPulse {
+            0%, 100% { border-color: rgba(255,255,255,0.1); }
+            50% { border-color: rgba(255,255,255,0.3); }
+        }
+
+        /* ============ SHOT RESULT OVERLAY ============ */
+        .shot-result {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.85);
+            z-index: 100;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+        }
+
+        .shot-result.active { display: flex; }
+
+        .shot-result-text {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 5rem;
+            font-weight: 900;
+            letter-spacing: 10px;
+            animation: resultSlam 0.5s cubic-bezier(0.68,-0.55,0.265,1.55);
+        }
+
+        .shot-result-text.hit-text {
+            color: var(--hit-color);
+            text-shadow: 0 0 60px rgba(255,45,85,0.8);
+        }
+
+        .shot-result-text.miss-text {
+            color: var(--miss-color);
+            text-shadow: 0 0 30px rgba(100,116,139,0.5);
+        }
+
+        .shot-result-text.sunk-text {
+            color: var(--accent-yellow);
+            text-shadow: 0 0 60px rgba(255,214,0,0.8);
+        }
+
+        .shot-result-sub {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 1.2rem;
+            color: var(--text-secondary);
+            margin-top: 15px;
+            letter-spacing: 3px;
+        }
+
+        .shot-wasted-text {
+            color: var(--accent-red);
+            text-shadow: 0 0 40px rgba(255,45,85,0.5);
+        }
+
+        @keyframes resultSlam {
+            0% { transform: scale(3); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        /* ============ SCORE DISPLAY ============ */
+        .score-panel {
+            background: var(--bg-card);
+            border: 1px solid rgba(255,255,255,0.05);
+            border-radius: 8px;
+            padding: 12px;
+        }
+
+        .score-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 4px 0;
+        }
+
+        .score-label {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .score-value {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1rem;
+            font-weight: 700;
+        }
+
+        /* ============ SHIP FLEET STATUS ============ */
+        .fleet-status {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            margin-top: 8px;
+        }
+
+        .ship-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.75rem;
+            font-family: 'Share Tech Mono', monospace;
+        }
+
+        .ship-blocks {
+            display: flex;
+            gap: 2px;
+        }
+
+        .ship-block {
+            width: 14px;
+            height: 8px;
+            border-radius: 1px;
+            transition: all 0.3s ease;
+        }
+
+        .team1-section .ship-block { background: var(--team1); }
+        .team2-section .ship-block { background: var(--team2); }
+        .ship-block.destroyed { background: var(--accent-red); opacity: 0.5; }
+
+        .ship-name {
+            color: var(--text-secondary);
+            min-width: 90px;
+        }
+
+        .ship-name.sunk-name {
+            text-decoration: line-through;
+            opacity: 0.4;
+        }
+
+        /* ============ SETUP SCREENS ============ */
+        .setup-screen, .game-screen, .victory-screen {
+            display: none;
+        }
+
+        .setup-screen.active, .game-screen.active, .victory-screen.active {
+            display: block;
+        }
+
+        .setup-container {
+            max-width: 700px;
+            margin: 40px auto;
+            background: var(--bg-panel);
+            border: 1px solid rgba(0,240,255,0.15);
+            border-radius: 12px;
+            padding: 40px;
+        }
+
+        .setup-container h2 {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.5rem;
+            color: var(--accent-cyan);
+            letter-spacing: 4px;
+            text-align: center;
+            margin-bottom: 25px;
+        }
+
+        .setup-label {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            letter-spacing: 2px;
+            margin-bottom: 8px;
+            display: block;
+        }
+
+        .setup-textarea {
+            width: 100%;
+            min-height: 160px;
+            background: var(--bg-dark);
+            border: 1px solid rgba(0,240,255,0.2);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 0.9rem;
+            padding: 15px;
+            resize: vertical;
+            outline: none;
+            transition: border-color 0.3s ease;
+        }
+
+        .setup-textarea:focus {
+            border-color: var(--accent-cyan);
+            box-shadow: 0 0 15px rgba(0,240,255,0.1);
+        }
+
+        .setup-textarea::placeholder { color: rgba(255,255,255,0.2); }
+
+        .team-names-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .setup-input {
+            width: 100%;
+            padding: 12px 15px;
+            background: var(--bg-dark);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 0.9rem;
+            outline: none;
+        }
+
+        .setup-input:focus {
+            border-color: var(--accent-cyan);
+        }
+
+        .setup-input.team1-input:focus { border-color: var(--team1); }
+        .setup-input.team2-input:focus { border-color: var(--team2); }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 14px 36px;
+            border: none;
+            border-radius: 6px;
+            font-family: 'Orbitron', sans-serif;
+            font-size: 0.9rem;
+            font-weight: 700;
+            letter-spacing: 3px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--accent-cyan), #0088a3);
+            color: white;
+            box-shadow: 0 4px 20px rgba(0,240,255,0.3);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 30px rgba(0,240,255,0.4);
+        }
+
+        .btn-fire {
+            background: linear-gradient(135deg, var(--accent-red), #cc0033);
+            color: white;
+            box-shadow: 0 4px 20px rgba(255,45,85,0.3);
+            padding: 12px 50px;
+            font-size: 1rem;
+        }
+
+        .btn-fire:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 30px rgba(255,45,85,0.4);
+        }
+
+        .btn-fire:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-secondary {
+            background: transparent;
+            color: var(--text-secondary);
+            border: 1px solid rgba(255,255,255,0.15);
+        }
+
+        .setup-actions {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-top: 30px;
+        }
+
+        /* ============ TEAM ROSTERS ============ */
+        .team-roster {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .roster-chip {
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 0.7rem;
+            font-family: 'Share Tech Mono', monospace;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.08);
+        }
+
+        .roster-chip.answered { border-color: var(--accent-green); color: var(--accent-green); }
+        .roster-chip.wrong-answer { border-color: var(--accent-red); color: var(--accent-red); }
+
+        /* ============ COORDINATE SELECT ============ */
+        .coord-select {
+            text-align: center;
+            margin-top: 10px;
+        }
+
+        .coord-display {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 2rem;
+            font-weight: 900;
+            color: var(--accent-yellow);
+            letter-spacing: 5px;
+            min-height: 50px;
+        }
+
+        /* ============ WAITING MESSAGE ============ */
+        .waiting-message {
+            text-align: center;
+            padding: 30px;
+        }
+
+        .waiting-message h3 {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.2rem;
+            color: var(--accent-cyan);
+            letter-spacing: 3px;
+            margin-bottom: 10px;
+        }
+
+        .waiting-message p {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        .players-joined {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 1.5rem;
+            color: var(--accent-green);
+            margin: 15px 0;
+        }
+
+        /* ============ VICTORY SCREEN ============ */
+        .victory-container {
+            text-align: center;
+            padding: 60px 20px;
+        }
+
+        .victory-title {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 3.5rem;
+            font-weight: 900;
+            letter-spacing: 8px;
+            margin-bottom: 15px;
+            animation: victoryPulse 2s ease infinite;
+        }
+
+        .victory-title.team1-win {
+            color: var(--team1);
+            text-shadow: 0 0 60px var(--team1-glow);
+        }
+
+        .victory-title.team2-win {
+            color: var(--team2);
+            text-shadow: 0 0 60px var(--team2-glow);
+        }
+
+        @keyframes victoryPulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.03); }
+        }
+
+        .victory-sub {
+            font-size: 1.3rem;
+            color: var(--text-secondary);
+            margin-bottom: 30px;
+        }
+
+        .victory-stats {
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+            margin-top: 30px;
+        }
+
+        .victory-stat {
+            text-align: center;
+        }
+
+        .victory-stat-value {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 2.5rem;
+            font-weight: 900;
+        }
+
+        .victory-stat-label {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            letter-spacing: 2px;
+            margin-top: 5px;
+        }
+
+        /* ============ QR PLACEHOLDER ============ */
+        .qr-area {
+            text-align: center;
+            margin: 20px 0;
+            padding: 20px;
+            background: rgba(255,255,255,0.03);
+            border-radius: 8px;
+        }
+
+        .qr-area canvas {
+            margin: 0 auto;
+        }
+
+        .join-url {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 0.85rem;
+            color: var(--accent-cyan);
+            margin-top: 10px;
+            word-break: break-all;
+        }
+
+        /* ============ TARGET COORDINATE ============ */
+        .target-coord-display {
+            background: var(--bg-card);
+            border: 2px solid var(--accent-yellow);
+            border-radius: 8px;
+            padding: 15px;
+            text-align: center;
+        }
+
+        .target-coord-label {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            letter-spacing: 2px;
+            margin-bottom: 5px;
+        }
+
+        .target-coord-value {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 2.5rem;
+            font-weight: 900;
+            color: var(--accent-yellow);
+            letter-spacing: 8px;
+        }
+
+        .fire-btn-container {
+            text-align: center;
+            margin-top: 10px;
+        }
+
+        /* ============ RESPONSIVE ============ */
+        @media (max-width: 1200px) {
+            .battle-area {
+                grid-template-columns: 1fr;
+                gap: 15px;
+            }
+            .center-panel {
+                max-width: 100%;
+                order: -1;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <div class="header">
+            <h1>Turbine Battleship</h1>
+            <div class="subtitle">ENGINE SYSTEMS COMBAT TRAINING</div>
+            <div class="room-code-display" id="roomCodeDisplay" style="display:none;">
+                ROOM: <span id="roomCodeText"></span>
+            </div>
+        </div>
+
+        <!-- ============ SETUP SCREEN ============ -->
+        <div class="setup-screen active" id="setupScreen">
+            <div class="setup-container">
+                <h2>⚙ Mission Briefing</h2>
+
+                <label class="setup-label">PASTE STUDENT ROSTER (ONE NAME PER LINE)</label>
+                <textarea class="setup-textarea" id="studentNames" placeholder="John Smith&#10;Jane Doe&#10;Bob Wilson&#10;..."></textarea>
+
+                <div class="team-names-row">
+                    <div>
+                        <label class="setup-label" style="color:var(--team1);">TEAM 1 NAME</label>
+                        <input class="setup-input team1-input" id="team1Name" value="Turbine Titans" />
+                    </div>
+                    <div>
+                        <label class="setup-label" style="color:var(--team2);">TEAM 2 NAME</label>
+                        <input class="setup-input team2-input" id="team2Name" value="Compressor Crew" />
+                    </div>
+                </div>
+
+                <div class="setup-actions">
+                    <button class="btn btn-primary" onclick="createGame()">
+                        🚀 LAUNCH GAME
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============ LOBBY SCREEN ============ -->
+        <div class="setup-screen" id="lobbyScreen">
+            <div class="setup-container" style="text-align:center;">
+                <h2>📡 Awaiting Crew</h2>
+                <p style="color:var(--text-secondary); margin-bottom:20px;">Students join at:</p>
+                <div class="qr-area" id="qrArea">
+                    <div class="join-url" id="joinUrl"></div>
+                </div>
+                <div class="players-joined">
+                    <span id="joinedCount">0</span> / <span id="totalCount">0</span> crew members aboard
+                </div>
+                <div id="joinedNames" style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin:15px 0;"></div>
+                <div class="setup-actions">
+                    <button class="btn btn-primary" id="beginPlacementBtn" onclick="beginShipPlacement()" disabled>
+                        🎯 BEGIN SHIP PLACEMENT
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============ PLACEMENT WAITING SCREEN ============ -->
+        <div class="setup-screen" id="placementScreen">
+            <div class="setup-container" style="text-align:center;">
+                <h2>🔧 Ship Placement in Progress</h2>
+                <p style="color:var(--text-secondary); margin-bottom:20px;">Teams are placing their ships on their devices...</p>
+                <div style="display:flex;justify-content:center;gap:40px;margin:30px 0;">
+                    <div>
+                        <div style="color:var(--team1);font-family:'Orbitron';font-size:1.1rem;" id="team1PlaceName">Turbine Titans</div>
+                        <div id="team1PlaceStatus" style="font-family:'Share Tech Mono';color:var(--text-secondary);margin-top:8px;">0 / 5 ships placed</div>
+                    </div>
+                    <div>
+                        <div style="color:var(--team2);font-family:'Orbitron';font-size:1.1rem;" id="team2PlaceName">Compressor Crew</div>
+                        <div id="team2PlaceStatus" style="font-family:'Share Tech Mono';color:var(--text-secondary);margin-top:8px;">0 / 5 ships placed</div>
+                    </div>
+                </div>
+                <button class="btn btn-primary" id="startBattleBtn" onclick="startBattle()" disabled style="margin-top:20px;">
+                    ⚔ START BATTLE
+                </button>
+            </div>
+        </div>
+
+        <!-- ============ GAME SCREEN ============ -->
+        <div class="game-screen" id="gameScreen">
+            <div class="status-bar">
+                <div class="turn-indicator team1" id="turnIndicator">TURBINE TITANS' TURN</div>
+                <div class="phase-label" id="phaseLabel">SELECT TARGET</div>
+            </div>
+
+            <div class="battle-area">
+                <!-- Team 1 Grid -->
+                <div class="team-section team1-section">
+                    <div class="team-header">
+                        <div class="team-name" id="grid1TeamName">TURBINE TITANS</div>
+                        <div class="ships-remaining">Ships: <span id="team1Ships">5</span>/5</div>
+                    </div>
+                    <div class="grid-container" id="grid1"></div>
+                    <div class="fleet-status" id="fleet1Status"></div>
+                    <div class="team-roster" id="team1Roster"></div>
+                </div>
+
+                <!-- Center Panel -->
+                <div class="center-panel">
+                    <!-- Target Coordinate -->
+                    <div class="target-coord-display" id="targetCoordDisplay" style="display:none;">
+                        <div class="target-coord-label">TARGET COORDINATE</div>
+                        <div class="target-coord-value" id="targetCoordValue">--</div>
+                        <div class="fire-btn-container">
+                            <button class="btn btn-fire" id="fireBtn" onclick="fireShot()" disabled>
+                                🔥 FIRE
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Question Card -->
+                    <div class="question-card" id="questionCard" style="display:none;">
+                        <div class="question-category" id="questionCategory">FUEL SYSTEMS</div>
+                        <div class="question-text" id="questionText">Loading question...</div>
+                        <div class="answer-options" id="answerOptions"></div>
+                        <div class="timer-bar-container">
+                            <div class="timer-bar" id="timerBar"></div>
+                        </div>
+                    </div>
+
+                    <!-- Response Tracker -->
+                    <div class="response-tracker" id="responseTracker" style="display:none;">
+                        <h3>CREW RESPONSES</h3>
+                        <div class="response-dots" id="responseDots"></div>
+                        <div style="text-align:center;margin-top:12px;">
+                            <span style="font-family:'Share Tech Mono';font-size:0.85rem;color:var(--text-secondary);">
+                                <span id="answeredCount">0</span> / <span id="teamSize">0</span> answered
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- Score Panel -->
+                    <div class="score-panel" id="scorePanel">
+                        <div class="score-row">
+                            <span class="score-label" style="color:var(--team1);" id="score1Label">Turbine Titans</span>
+                            <span class="score-value" style="color:var(--team1);" id="score1Value">0 hits</span>
+                        </div>
+                        <div class="score-row">
+                            <span class="score-label" style="color:var(--team2);" id="score2Label">Compressor Crew</span>
+                            <span class="score-value" style="color:var(--team2);" id="score2Value">0 hits</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Team 2 Grid -->
+                <div class="team-section team2-section">
+                    <div class="team-header">
+                        <div class="team-name" id="grid2TeamName">COMPRESSOR CREW</div>
+                        <div class="ships-remaining">Ships: <span id="team2Ships">5</span>/5</div>
+                    </div>
+                    <div class="grid-container" id="grid2"></div>
+                    <div class="fleet-status" id="fleet2Status"></div>
+                    <div class="team-roster" id="team2Roster"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============ VICTORY SCREEN ============ -->
+        <div class="victory-screen" id="victoryScreen">
+            <div class="victory-container">
+                <div class="victory-title" id="victoryTitle">TEAM WINS!</div>
+                <div class="victory-sub" id="victorySub">All enemy ships destroyed</div>
+                <div class="victory-stats" id="victoryStats"></div>
+                <div class="setup-actions" style="margin-top:40px;">
+                    <button class="btn btn-primary" onclick="location.reload()">🔄 NEW GAME</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============ SHOT RESULT OVERLAY ============ -->
+        <div class="shot-result" id="shotResult">
+            <div class="shot-result-text" id="shotResultText">HIT</div>
+            <div class="shot-result-sub" id="shotResultSub"></div>
+        </div>
+    </div>
+
+    <!-- Firebase -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
+    <script>
+        // ============================================
+        // FIREBASE CONFIG
+        // ============================================
+        const firebaseConfig = {
+            apiKey: "AIzaSyCurExqdj1MJhr3QawyfkpylfNC881ENFA",
+            authDomain: "turbine-battleship-20e23.firebaseapp.com",
+            databaseURL: "https://turbine-battleship-20e23-default-rtdb.firebaseio.com",
+            projectId: "turbine-battleship-20e23",
+            storageBucket: "turbine-battleship-20e23.firebasestorage.app",
+            messagingSenderId: "821986197860",
+            appId: "1:821986197860:web:6c91fda1e0cc8cf4c1ba71"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        // ============================================
+        // GAME CONSTANTS
+        // ============================================
+        const GRID_SIZE = 10;
+        const COLS = ['A','B','C','D','E','F','G','H','I','J'];
+
+        const SHIPS = [
+            { name: 'Turbine Assembly', size: 5 },
+            { name: 'Combustion Liner', size: 4 },
+            { name: 'Compressor Rotor', size: 3 },
+            { name: 'Fuel Control Unit', size: 3 },
+            { name: 'Igniter Plug', size: 2 }
+        ];
+
+        const QUESTION_TIME = 30; // seconds
+
+        // ============================================
+        // FUEL SYSTEM QUESTION BANK
+        // ============================================
+        const QUESTIONS = [
+            { category: "Fuel Types", q: "What is the most common civil aviation turbine fuel used in North America?", answers: ["Jet B", "Jet A", "JP-4", "JP-8"], correct: 1 },
+            { category: "Fuel Types", q: "What is the primary difference between Jet A and Jet A-1?", answers: ["Color", "Freezing point", "Flash point", "Density"], correct: 1 },
+            { category: "Fuel Types", q: "Jet B is used primarily in what climate condition?", answers: ["Tropical", "Extremely cold weather", "High altitude", "Desert"], correct: 1 },
+            { category: "Fuel Types", q: "JP-8 is the military equivalent of which civil fuel?", answers: ["Jet A", "Jet A-1", "Jet B", "Avgas"], correct: 1 },
+            { category: "Fuel Types", q: "What property of turbine fuel affects fuel quantity calculations?", answers: ["Flash point", "Color", "Specific gravity", "Octane rating"], correct: 2 },
+            { category: "Fuel Pumps", q: "What pump type provides positive pressure to the engine-driven pump?", answers: ["Ejector pump", "Boost pump", "Gear pump", "Centrifugal pump"], correct: 1 },
+            { category: "Fuel Pumps", q: "The main engine-driven fuel pump is typically what type?", answers: ["Centrifugal", "Ejector", "Gear or vane type", "Diaphragm"], correct: 2 },
+            { category: "Fuel Pumps", q: "Which pump uses high-velocity fuel to create suction with no moving parts?", answers: ["Boost pump", "Gear pump", "Ejector pump", "Vane pump"], correct: 2 },
+            { category: "Fuel Pumps", q: "Centrifugal boost pumps are typically powered by what?", answers: ["Bleed air", "Electricity", "Hydraulics", "Engine gearbox"], correct: 1 },
+            { category: "Fuel Pumps", q: "If the boost pump fails, the engine-driven pump creates what condition?", answers: ["Cavitation", "Suction", "Overpressure", "Vapor lock"], correct: 1 },
+            { category: "Fuel Control", q: "What is the primary function of the FCU?", answers: ["Filter fuel", "Heat fuel", "Meter fuel flow to the engine", "Store fuel"], correct: 2 },
+            { category: "Fuel Control", q: "What does FADEC stand for?", answers: ["Fuel And Data Electronic Control", "Full Authority Digital Engine Control", "Fuel Atomization Direct Engine Control", "Flight And Data Engine Computer"], correct: 1 },
+            { category: "Fuel Control", q: "A hydromechanical FCU uses throttle position, CDP, and what temperature?", answers: ["Exhaust gas temperature", "Oil temperature", "Compressor inlet temperature", "Ambient temperature"], correct: 2 },
+            { category: "Fuel Control", q: "What FADEC advantage eliminates manual power adjustments?", answers: ["Weight reduction", "Automatic thrust management", "Lower fuel consumption", "Simplified maintenance"], correct: 1 },
+            { category: "Fuel Control", q: "Most FADEC systems have what redundancy feature?", answers: ["Triple sensors", "Dual channel", "Backup FCU", "Manual override only"], correct: 1 },
+            { category: "Nozzles & Flow", q: "What component divides fuel between primary and secondary manifolds?", answers: ["Fuel heater", "Flow divider", "Pressurizing valve", "Bypass valve"], correct: 1 },
+            { category: "Nozzles & Flow", q: "A duplex fuel nozzle has which two spray orifices?", answers: ["Inner and outer", "Primary and secondary", "Upper and lower", "Forward and aft"], correct: 1 },
+            { category: "Nozzles & Flow", q: "Which nozzle type uses compressor air to assist atomization?", answers: ["Simplex", "Duplex", "Airblast", "Vaporizing"], correct: 2 },
+            { category: "Nozzles & Flow", q: "The pressurizing and dump valve does what at shutdown?", answers: ["Filters fuel", "Drains fuel manifolds", "Controls temperature", "Measures flow"], correct: 1 },
+            { category: "Nozzles & Flow", q: "Simplex nozzles are limited to what engine application?", answers: ["Large turbofans", "APUs or small engines", "Afterburners", "Helicopter engines"], correct: 1 },
+            { category: "Contamination", q: "What contamination appears as dark slimy substance in fuel tanks?", answers: ["Water", "Rust", "Microbial growth", "Sediment"], correct: 2 },
+            { category: "Contamination", q: "Microbial contamination grows primarily at what tank location?", answers: ["Top of tank", "Fuel/water interface", "Fuel lines", "In the FCU"], correct: 1 },
+            { category: "Contamination", q: "What fuel system component prevents ice crystals from blocking flow?", answers: ["Boost pump", "Fuel filter", "Fuel heater", "Flow divider"], correct: 2 },
+            { category: "Contamination", q: "Fuel heaters typically use what source of heat?", answers: ["Electrical elements", "Engine oil or bleed air", "Exhaust gases", "Hydraulic fluid"], correct: 1 },
+            { category: "Contamination", q: "What additive inhibits microbial growth and acts as an icing inhibitor?", answers: ["Anti-oxidant", "Corrosion inhibitor", "FSII (Prist)", "Thermal stabilizer"], correct: 2 },
+            { category: "Fuel Control", q: "What input does a hydromechanical FCU NOT typically use?", answers: ["Throttle position", "Compressor discharge pressure", "GPS position", "Inlet temperature"], correct: 2 },
+            { category: "Nozzles & Flow", q: "What is the purpose of fuel nozzle atomization?", answers: ["Cool the combustor", "Create fine spray for efficient combustion", "Prevent coking", "Reduce consumption"], correct: 1 },
+            { category: "Fuel Pumps", q: "A gear pump is classified as what type of pump?", answers: ["Variable displacement", "Positive displacement", "Centrifugal", "Dynamic"], correct: 1 },
+            { category: "Fuel Types", q: "What is the freezing point of Jet A fuel?", answers: ["-40°C", "-47°C", "-60°C", "-20°C"], correct: 0 },
+            { category: "Fuel Types", q: "Jet B fuel is a blend of what two fuels?", answers: ["Diesel and kerosene", "Gasoline and kerosene", "Avgas and diesel", "JP-4 and JP-8"], correct: 1 },
+            { category: "Fuel Control", q: "What happens in an FCU during an overspeed condition?", answers: ["Fuel flow increases", "Fuel flow decreases", "Ignition cuts out", "Bleed valves open"], correct: 1 },
+            { category: "Fuel Control", q: "The governor in an FCU balances flyweight force against what?", answers: ["Fuel pressure", "Speeder spring force", "Oil pressure", "Air pressure"], correct: 1 },
+            { category: "Contamination", q: "Water in fuel tanks can come from what atmospheric process?", answers: ["Evaporation", "Condensation", "Oxidation", "Sublimation"], correct: 1 },
+            { category: "Nozzles & Flow", q: "At low power, a duplex nozzle sprays through which orifice only?", answers: ["Secondary", "Primary", "Both equally", "Neither"], correct: 1 },
+            { category: "Fuel Pumps", q: "A shear section on an engine-driven fuel pump serves what purpose?", answers: ["Increases pressure", "Allows pump to disconnect if seized", "Filters debris", "Regulates flow"], correct: 1 },
+        ];
+
+        // ============================================
+        // GAME STATE
+        // ============================================
+        let roomCode = '';
+        let roomRef = null;
+        let gameData = null;
+        let timerInterval = null;
+        let selectedCoord = null;
+
+        // ============================================
+        // SETUP FUNCTIONS
+        // ============================================
+        function generateRoomCode() {
+            const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+            let code = '';
+            for (let i = 0; i < 5; i++) code += chars[Math.floor(Math.random() * chars.length)];
+            return code;
+        }
+
+        function shuffleArray(arr) {
+            const a = [...arr];
+            for (let i = a.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [a[i], a[j]] = [a[j], a[i]];
+            }
+            return a;
+        }
+
+        function createGame() {
+            const namesText = document.getElementById('studentNames').value.trim();
+            if (!namesText) { alert('Please enter student names'); return; }
+
+            const names = namesText.split('\n').map(n => n.trim()).filter(n => n.length > 0);
+            if (names.length < 4) { alert('Need at least 4 students (2 per team)'); return; }
+
+            const team1Name = document.getElementById('team1Name').value.trim() || 'Turbine Titans';
+            const team2Name = document.getElementById('team2Name').value.trim() || 'Compressor Crew';
+
+            // Shuffle and split into teams
+            const shuffled = shuffleArray(names);
+            const mid = Math.ceil(shuffled.length / 2);
+            const team1 = shuffled.slice(0, mid);
+            const team2 = shuffled.slice(mid);
+
+            roomCode = generateRoomCode();
+            roomRef = db.ref('battleship/' + roomCode);
+
+            // Prepare shuffled questions for this game
+            const gameQuestions = shuffleArray(QUESTIONS).slice(0, 35).map((q, i) => {
+                // Shuffle answer options
+                const indices = [0, 1, 2, 3];
+                const shuffledIndices = shuffleArray(indices);
+                return {
+                    category: q.category,
+                    q: q.q,
+                    answers: shuffledIndices.map(idx => q.answers[idx]),
+                    correct: shuffledIndices.indexOf(q.correct)
+                };
+            });
+
+            const gameState = {
+                roomCode: roomCode,
+                phase: 'lobby',
+                team1Name: team1Name,
+                team2Name: team2Name,
+                team1Players: team1,
+                team2Players: team2,
+                team1Joined: { _init: true },
+                team2Joined: { _init: true },
+                team1Ships: false,
+                team2Ships: false,
+                team1ShipsPlaced: 0,
+                team2ShipsPlaced: 0,
+                currentTurn: 1,
+                currentQuestion: false,
+                questionIndex: 0,
+                questions: gameQuestions,
+                responses: { _init: true },
+                targetCoord: false,
+                shotHistory: { _init: true },
+                team1Hits: 0,
+                team2Hits: 0,
+                team1Sunk: ['_none'],
+                team2Sunk: ['_none'],
+                winner: false,
+                createdAt: firebase.database.ServerValue.TIMESTAMP
+            };
+
+            console.log('Creating room:', roomCode);
+            roomRef.set(gameState).then(() => {
+                console.log('Room created successfully');
+                // Show room code
+                document.getElementById('roomCodeDisplay').style.display = 'inline-block';
+                document.getElementById('roomCodeText').textContent = roomCode;
+                document.getElementById('totalCount').textContent = names.length;
+
+                // Switch to lobby
+                showScreen('lobbyScreen');
+
+                // Set join URL
+                const currentUrl = window.location.href.replace('host.html', 'student.html');
+                document.getElementById('joinUrl').textContent = currentUrl + '?room=' + roomCode;
+
+                // Listen for joins
+                listenForUpdates();
+            }).catch(err => {
+                console.error('Firebase write error:', err);
+                alert('Firebase error: ' + err.message + '\n\nMake sure your Realtime Database rules allow writes. Go to Firebase Console → Realtime Database → Rules and set:\n{\n  "rules": {\n    ".read": true,\n    ".write": true\n  }\n}');
+            });
+        }
+
+        function listenForUpdates() {
+            roomRef.on('value', snap => {
+                gameData = snap.val();
+                if (!gameData) return;
+
+                updateLobby();
+                updatePlacementStatus();
+                updateBattleDisplay();
+                checkVictory();
+            });
+        }
+
+        function updateLobby() {
+            if (gameData.phase !== 'lobby') return;
+
+            const t1Joined = gameData.team1Joined ? Object.keys(gameData.team1Joined).length : 0;
+            const t2Joined = gameData.team2Joined ? Object.keys(gameData.team2Joined).length : 0;
+            const total = t1Joined + t2Joined;
+            const expected = (gameData.team1Players || []).length + (gameData.team2Players || []).length;
+
+            document.getElementById('joinedCount').textContent = total;
+            document.getElementById('totalCount').textContent = expected;
+
+            // Show joined names
+            const container = document.getElementById('joinedNames');
+            container.innerHTML = '';
+
+            const allJoined = [
+                ...Object.values(gameData.team1Joined || {}).map(n => ({name: n, team: 1})),
+                ...Object.values(gameData.team2Joined || {}).map(n => ({name: n, team: 2}))
+            ];
+
+            allJoined.forEach(p => {
+                const chip = document.createElement('span');
+                chip.className = 'roster-chip';
+                chip.style.borderColor = p.team === 1 ? 'var(--team1)' : 'var(--team2)';
+                chip.style.color = p.team === 1 ? 'var(--team1)' : 'var(--team2)';
+                chip.textContent = p.name;
+                container.appendChild(chip);
+            });
+
+            // Enable start button if enough players
+            document.getElementById('beginPlacementBtn').disabled = total < 2;
+        }
+
+        function beginShipPlacement() {
+            roomRef.update({ phase: 'placement' });
+            showScreen('placementScreen');
+            document.getElementById('team1PlaceName').textContent = gameData.team1Name;
+            document.getElementById('team2PlaceName').textContent = gameData.team2Name;
+        }
+
+        function updatePlacementStatus() {
+            if (gameData.phase !== 'placement') return;
+
+            const t1 = gameData.team1ShipsPlaced || 0;
+            const t2 = gameData.team2ShipsPlaced || 0;
+
+            document.getElementById('team1PlaceStatus').textContent = `${t1} / 5 ships placed`;
+            document.getElementById('team2PlaceStatus').textContent = `${t2} / 5 ships placed`;
+
+            if (t1 >= 5) document.getElementById('team1PlaceStatus').style.color = 'var(--accent-green)';
+            if (t2 >= 5) document.getElementById('team2PlaceStatus').style.color = 'var(--accent-green)';
+
+            document.getElementById('startBattleBtn').disabled = !(t1 >= 5 && t2 >= 5);
+        }
+
+        function startBattle() {
+            roomRef.update({ phase: 'battle' });
+            showScreen('gameScreen');
+            initBattleGrids();
+        }
+
+        // ============================================
+        // BATTLE DISPLAY
+        // ============================================
+        function initBattleGrids() {
+            buildGrid('grid1');
+            buildGrid('grid2');
+            updateTeamNames();
+            updateFleetStatus();
+            updateRosters();
+        }
+
+        function buildGrid(gridId) {
+            const grid = document.getElementById(gridId);
+            grid.innerHTML = '';
+
+            // Corner cell
+            const corner = document.createElement('div');
+            corner.className = 'grid-label';
+            grid.appendChild(corner);
+
+            // Column headers
+            for (let c = 0; c < GRID_SIZE; c++) {
+                const label = document.createElement('div');
+                label.className = 'grid-label';
+                label.textContent = COLS[c];
+                grid.appendChild(label);
+            }
+
+            // Rows
+            for (let r = 0; r < GRID_SIZE; r++) {
+                const rowLabel = document.createElement('div');
+                rowLabel.className = 'grid-label';
+                rowLabel.textContent = String(r + 1);
+                grid.appendChild(rowLabel);
+
+                for (let c = 0; c < GRID_SIZE; c++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'grid-cell';
+                    cell.id = `${gridId}-${r}-${c}`;
+                    cell.dataset.row = r;
+                    cell.dataset.col = c;
+
+                    // Only allow clicking on the enemy grid
+                    cell.addEventListener('click', () => handleCellClick(gridId, r, c));
+
+                    grid.appendChild(cell);
+                }
+            }
+        }
+
+        function handleCellClick(gridId, row, col) {
+            if (!gameData || gameData.phase !== 'battle') return;
+
+            // Determine which grid is the target (enemy) grid
+            const attackingTeam = gameData.currentTurn;
+            const targetGrid = attackingTeam === 1 ? 'grid2' : 'grid1';
+
+            if (gridId !== targetGrid) return; // Can't click own grid
+
+            // Check if already shot here
+            const coordKey = `${row}-${col}`;
+            const targetTeam = attackingTeam === 1 ? 2 : 1;
+            const shotKey = `t${attackingTeam}_${coordKey}`;
+
+            if (gameData.shotHistory && gameData.shotHistory[shotKey]) return; // Already shot
+
+            // Check phase - only allow selection when waiting for coordinate
+            if (gameData.currentQuestion !== false && gameData.currentQuestion !== null) return; // Question in progress
+
+            // Highlight selected cell
+            clearCellHighlights(targetGrid);
+            const cell = document.getElementById(`${targetGrid}-${row}-${col}`);
+            cell.style.boxShadow = '0 0 15px var(--accent-yellow), inset 0 0 10px rgba(255,214,0,0.2)';
+            cell.style.borderColor = 'var(--accent-yellow)';
+
+            selectedCoord = { row, col };
+            document.getElementById('targetCoordValue').textContent = `${COLS[col]}${row + 1}`;
+            document.getElementById('targetCoordDisplay').style.display = 'block';
+            document.getElementById('fireBtn').disabled = false;
+        }
+
+        function clearCellHighlights(gridId) {
+            for (let r = 0; r < GRID_SIZE; r++) {
+                for (let c = 0; c < GRID_SIZE; c++) {
+                    const cell = document.getElementById(`${gridId}-${r}-${c}`);
+                    if (cell && !cell.classList.contains('hit') && !cell.classList.contains('miss') && !cell.classList.contains('sunk')) {
+                        cell.style.boxShadow = '';
+                        cell.style.borderColor = '';
+                    }
+                }
+            }
+        }
+
+        function fireShot() {
+            if (!selectedCoord) return;
+
+            document.getElementById('fireBtn').disabled = true;
+            document.getElementById('targetCoordDisplay').style.display = 'none';
+
+            // Store target and trigger question
+            const qIndex = gameData.questionIndex || 0;
+            if (qIndex >= (gameData.questions || []).length) {
+                // Out of questions - shot fires automatically
+                resolveShot(true);
+                return;
+            }
+
+            roomRef.update({
+                targetCoord: selectedCoord,
+                currentQuestion: qIndex,
+                questionIndex: qIndex + 1,
+                responses: {}
+            });
+
+            // Show question on host
+            showQuestion(qIndex);
+        }
+
+        function showQuestion(qIndex) {
+            const q = gameData.questions[qIndex];
+            if (!q) return;
+
+            document.getElementById('questionCard').style.display = 'block';
+            document.getElementById('responseTracker').style.display = 'block';
+            document.getElementById('phaseLabel').textContent = 'ANSWER THE QUESTION';
+
+            document.getElementById('questionCategory').textContent = q.category.toUpperCase();
+            document.getElementById('questionText').textContent = q.q;
+
+            const optionsDiv = document.getElementById('answerOptions');
+            optionsDiv.innerHTML = '';
+            q.answers.forEach((ans, i) => {
+                const div = document.createElement('div');
+                div.className = 'answer-option';
+                div.id = `option-${i}`;
+                div.textContent = `${String.fromCharCode(65 + i)}) ${ans}`;
+                optionsDiv.appendChild(div);
+            });
+
+            // Setup response dots for attacking team
+            const attackingTeam = gameData.currentTurn;
+            const players = attackingTeam === 1 ? gameData.team1Players : gameData.team2Players;
+            const dotsDiv = document.getElementById('responseDots');
+            dotsDiv.innerHTML = '';
+            (players || []).forEach((name, i) => {
+                const dot = document.createElement('div');
+                dot.className = 'response-dot waiting';
+                dot.id = `dot-${i}`;
+                dot.textContent = name.substring(0, 2).toUpperCase();
+                dot.title = name;
+                dotsDiv.appendChild(dot);
+            });
+
+            document.getElementById('teamSize').textContent = (players || []).length;
+            document.getElementById('answeredCount').textContent = '0';
+
+            // Start timer
+            startTimer();
+
+            // Listen for responses
+            listenForResponses(qIndex);
+        }
+
+        let responseListener = null;
+
+        function listenForResponses(qIndex) {
+            if (responseListener) roomRef.child('responses').off('value', responseListener);
+
+            responseListener = roomRef.child('responses').on('value', snap => {
+                const responses = snap.val() || {};
+                const attackingTeam = gameData.currentTurn;
+                const players = attackingTeam === 1 ? gameData.team1Players : gameData.team2Players;
+                const q = gameData.questions[qIndex];
+
+                let answeredCount = 0;
+                let correctCount = 0;
+
+                Object.entries(responses).forEach(([playerName, answer]) => {
+                    const playerIndex = (players || []).indexOf(playerName);
+                    if (playerIndex === -1) return;
+
+                    answeredCount++;
+                    const isCorrect = answer === q.correct;
+                    if (isCorrect) correctCount++;
+
+                    const dot = document.getElementById(`dot-${playerIndex}`);
+                    if (dot) {
+                        dot.className = `response-dot ${isCorrect ? 'answered-correct' : 'answered-wrong'}`;
+                    }
+                });
+
+                document.getElementById('answeredCount').textContent = answeredCount;
+
+                // Check if all answered
+                if (answeredCount >= (players || []).length) {
+                    clearInterval(timerInterval);
+                    setTimeout(() => revealAnswerAndResolve(qIndex, correctCount, answeredCount), 800);
+                }
+            });
+        }
+
+        function startTimer() {
+            let timeLeft = QUESTION_TIME;
+            const bar = document.getElementById('timerBar');
+            bar.style.width = '100%';
+            bar.className = 'timer-bar';
+
+            clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                timeLeft--;
+                const pct = (timeLeft / QUESTION_TIME) * 100;
+                bar.style.width = pct + '%';
+
+                if (pct <= 20) bar.className = 'timer-bar danger';
+                else if (pct <= 50) bar.className = 'timer-bar warning';
+
+                if (timeLeft <= 0) {
+                    clearInterval(timerInterval);
+                    // Time's up - resolve with current responses
+                    const responses = gameData.responses || {};
+                    const attackingTeam = gameData.currentTurn;
+                    const players = attackingTeam === 1 ? gameData.team1Players : gameData.team2Players;
+                    const q = gameData.questions[gameData.currentQuestion];
+
+                    let correctCount = 0;
+                    let answeredCount = 0;
+                    Object.entries(responses).forEach(([name, answer]) => {
+                        if ((players || []).includes(name)) {
+                            answeredCount++;
+                            if (answer === q.correct) correctCount++;
+                        }
+                    });
+
+                    revealAnswerAndResolve(gameData.currentQuestion, correctCount, answeredCount || (players || []).length);
+                }
+            }, 1000);
+        }
+
+        function revealAnswerAndResolve(qIndex, correctCount, totalAnswered) {
+            if (responseListener) {
+                roomRef.child('responses').off('value', responseListener);
+                responseListener = null;
+            }
+
+            const q = gameData.questions[qIndex];
+
+            // Highlight correct/wrong options
+            q.answers.forEach((ans, i) => {
+                const el = document.getElementById(`option-${i}`);
+                if (!el) return;
+                if (i === q.correct) el.className = 'answer-option correct';
+                else el.className = 'answer-option wrong';
+            });
+
+            const majority = correctCount > totalAnswered / 2;
+
+            // Wait then resolve shot
+            setTimeout(() => {
+                document.getElementById('questionCard').style.display = 'none';
+                document.getElementById('responseTracker').style.display = 'none';
+                resolveShot(majority);
+            }, 2500);
+        }
+
+        function resolveShot(shotFires) {
+            const coord = gameData.targetCoord || selectedCoord;
+            if (!coord) return;
+
+            const attackingTeam = gameData.currentTurn;
+            const targetTeam = attackingTeam === 1 ? 2 : 1;
+            const targetShips = targetTeam === 1 ? gameData.team1Ships : gameData.team2Ships;
+
+            if (!shotFires) {
+                // Shot wasted
+                showShotResult('WASTED', 'Majority answered incorrectly!');
+                setTimeout(() => {
+                    hideShotResult();
+                    nextTurn();
+                }, 2500);
+                return;
+            }
+
+            // Check if hit
+            let hitShipName = null;
+            let hitShipIndex = -1;
+
+            if (targetShips) {
+                for (let s = 0; s < targetShips.length; s++) {
+                    const ship = targetShips[s];
+                    if (!ship || !ship.cells) continue;
+                    for (const cell of ship.cells) {
+                        if (cell.row === coord.row && cell.col === coord.col) {
+                            hitShipName = ship.name;
+                            hitShipIndex = s;
+                            break;
+                        }
+                    }
+                    if (hitShipName) break;
+                }
+            }
+
+            const shotKey = `t${attackingTeam}_${coord.row}-${coord.col}`;
+            const updates = {};
+
+            if (hitShipName) {
+                // Check if sunk
+                const ship = targetShips[hitShipIndex];
+                const existingShots = gameData.shotHistory || {};
+                let hitCells = 1; // This shot
+                for (const cell of ship.cells) {
+                    const checkKey = `t${attackingTeam}_${cell.row}-${cell.col}`;
+                    if (existingShots[checkKey] && (existingShots[checkKey].result === 'hit' || existingShots[checkKey].result === 'sunk')) {
+                        hitCells++;
+                    }
+                }
+
+                const isSunk = hitCells >= ship.cells.length;
+
+                if (isSunk) {
+                    // Mark all ship cells as sunk
+                    for (const cell of ship.cells) {
+                        const cellKey = `t${attackingTeam}_${cell.row}-${cell.col}`;
+                        updates[`shotHistory/${cellKey}`] = {
+                            row: cell.row,
+                            col: cell.col,
+                            targetTeam: targetTeam,
+                            result: 'sunk',
+                            shipName: ship.name
+                        };
+                    }
+
+                    const sunkKey = targetTeam === 1 ? 'team1Sunk' : 'team2Sunk';
+                    const currentSunk = getSunkList(targetTeam);
+                    updates[sunkKey] = [...currentSunk, hitShipName];
+
+                    const hitsKey = attackingTeam === 1 ? 'team1Hits' : 'team2Hits';
+                    updates[hitsKey] = (attackingTeam === 1 ? gameData.team1Hits : gameData.team2Hits) + 1;
+
+                    showShotResult('SUNK', `${hitShipName} destroyed!`);
+                } else {
+                    updates[`shotHistory/${shotKey}`] = {
+                        row: coord.row,
+                        col: coord.col,
+                        targetTeam: targetTeam,
+                        result: 'hit',
+                        shipName: hitShipName
+                    };
+
+                    const hitsKey = attackingTeam === 1 ? 'team1Hits' : 'team2Hits';
+                    updates[hitsKey] = (attackingTeam === 1 ? gameData.team1Hits : gameData.team2Hits) + 1;
+
+                    showShotResult('HIT', hitShipName);
+                }
+            } else {
+                updates[`shotHistory/${shotKey}`] = {
+                    row: coord.row,
+                    col: coord.col,
+                    targetTeam: targetTeam,
+                    result: 'miss'
+                };
+
+                showShotResult('MISS', '');
+            }
+
+            updates.currentQuestion = false;
+            updates.targetCoord = false;
+            updates.responses = { _init: true };
+
+            roomRef.update(updates);
+
+            setTimeout(() => {
+                hideShotResult();
+                // Check victory before switching turns
+                const updatedSunkRaw = (targetTeam === 1 ? (updates.team1Sunk || gameData.team1Sunk) : (updates.team2Sunk || gameData.team2Sunk)) || [];
+                const updatedSunk = Array.isArray(updatedSunkRaw) ? updatedSunkRaw.filter(s => s !== '_none') : [];
+                if (updatedSunk.length >= 5) {
+                    roomRef.update({ phase: 'victory', winner: attackingTeam });
+                } else {
+                    nextTurn();
+                }
+            }, 3000);
+
+            selectedCoord = null;
+        }
+
+        function nextTurn() {
+            const next = gameData.currentTurn === 1 ? 2 : 1;
+            roomRef.update({ currentTurn: next });
+            document.getElementById('phaseLabel').textContent = 'SELECT TARGET';
+        }
+
+        function showShotResult(type, detail) {
+            const overlay = document.getElementById('shotResult');
+            const text = document.getElementById('shotResultText');
+            const sub = document.getElementById('shotResultSub');
+
+            if (type === 'HIT') {
+                text.className = 'shot-result-text hit-text';
+                text.textContent = 'HIT!';
+            } else if (type === 'MISS') {
+                text.className = 'shot-result-text miss-text';
+                text.textContent = 'MISS';
+            } else if (type === 'SUNK') {
+                text.className = 'shot-result-text sunk-text';
+                text.textContent = 'SUNK!';
+            } else if (type === 'WASTED') {
+                text.className = 'shot-result-text shot-wasted-text';
+                text.textContent = 'SHOT WASTED';
+            }
+
+            sub.textContent = detail;
+            overlay.classList.add('active');
+        }
+
+        function hideShotResult() {
+            document.getElementById('shotResult').classList.remove('active');
+        }
+
+        // ============================================
+        // DISPLAY UPDATES
+        // ============================================
+        function updateBattleDisplay() {
+            if (!gameData || gameData.phase !== 'battle') {
+                if (gameData && gameData.phase === 'battle') showScreen('gameScreen');
+                return;
+            }
+
+            showScreen('gameScreen');
+            if (!document.getElementById('grid1').children.length) initBattleGrids();
+
+            updateTeamNames();
+            updateTurnDisplay();
+            updateGridCells();
+            updateScores();
+            updateFleetStatus();
+            updateRosters();
+        }
+
+        function updateTeamNames() {
+            if (!gameData) return;
+            document.getElementById('grid1TeamName').textContent = gameData.team1Name;
+            document.getElementById('grid2TeamName').textContent = gameData.team2Name;
+            document.getElementById('score1Label').textContent = gameData.team1Name;
+            document.getElementById('score2Label').textContent = gameData.team2Name;
+        }
+
+        function updateTurnDisplay() {
+            const indicator = document.getElementById('turnIndicator');
+            const turn = gameData.currentTurn;
+            const name = turn === 1 ? gameData.team1Name : gameData.team2Name;
+            indicator.textContent = `${name}'s TURN`;
+            indicator.className = `turn-indicator team${turn}`;
+        }
+
+        function updateGridCells() {
+            // Clear all cells first
+            for (let gridId of ['grid1', 'grid2']) {
+                for (let r = 0; r < GRID_SIZE; r++) {
+                    for (let c = 0; c < GRID_SIZE; c++) {
+                        const cell = document.getElementById(`${gridId}-${r}-${c}`);
+                        if (cell) {
+                            cell.className = 'grid-cell';
+                            cell.style.boxShadow = '';
+                            cell.style.borderColor = '';
+                        }
+                    }
+                }
+            }
+
+            // Apply shots
+            if (gameData.shotHistory) {
+                Object.entries(gameData.shotHistory).forEach(([key, shot]) => {
+                    const targetGrid = shot.targetTeam === 1 ? 'grid1' : 'grid2';
+                    const cell = document.getElementById(`${targetGrid}-${shot.row}-${shot.col}`);
+                    if (cell) {
+                        cell.className = `grid-cell ${shot.result}`;
+                    }
+                });
+            }
+        }
+
+        // Helper to get real sunk ships (filter placeholder)
+        function getSunkList(team) {
+            const raw = (team === 1 ? gameData.team1Sunk : gameData.team2Sunk) || [];
+            return Array.isArray(raw) ? raw.filter(s => s !== '_none') : [];
+        }
+
+        function updateScores() {
+            document.getElementById('score1Value').textContent = `${gameData.team1Hits || 0} hits`;
+            document.getElementById('score2Value').textContent = `${gameData.team2Hits || 0} hits`;
+
+            const t1Sunk = getSunkList(1).length;
+            const t2Sunk = getSunkList(2).length;
+            document.getElementById('team1Ships').textContent = 5 - t1Sunk;
+            document.getElementById('team2Ships').textContent = 5 - t2Sunk;
+        }
+
+        function updateFleetStatus() {
+            if (!gameData) return;
+
+            for (let team of [1, 2]) {
+                const container = document.getElementById(`fleet${team}Status`);
+                container.innerHTML = '';
+                const sunkList = getSunkList(team);
+
+                SHIPS.forEach(ship => {
+                    const isSunk = sunkList.includes(ship.name);
+                    const row = document.createElement('div');
+                    row.className = 'ship-status';
+
+                    const nameSpan = document.createElement('span');
+                    nameSpan.className = `ship-name ${isSunk ? 'sunk-name' : ''}`;
+                    nameSpan.textContent = ship.name;
+                    row.appendChild(nameSpan);
+
+                    const blocks = document.createElement('div');
+                    blocks.className = 'ship-blocks';
+                    for (let i = 0; i < ship.size; i++) {
+                        const block = document.createElement('div');
+                        block.className = `ship-block ${isSunk ? 'destroyed' : ''}`;
+                        blocks.appendChild(block);
+                    }
+                    row.appendChild(blocks);
+
+                    container.appendChild(row);
+                });
+            }
+        }
+
+        function updateRosters() {
+            if (!gameData) return;
+
+            for (let team of [1, 2]) {
+                const container = document.getElementById(`team${team}Roster`);
+                container.innerHTML = '';
+                const players = team === 1 ? gameData.team1Players : gameData.team2Players;
+                (players || []).forEach(name => {
+                    const chip = document.createElement('span');
+                    chip.className = 'roster-chip';
+                    chip.textContent = name;
+                    container.appendChild(chip);
+                });
+            }
+        }
+
+        function checkVictory() {
+            if (!gameData || gameData.phase !== 'victory') return;
+
+            const winner = gameData.winner;
+            const winnerName = winner === 1 ? gameData.team1Name : gameData.team2Name;
+
+            document.getElementById('victoryTitle').textContent = `${winnerName} WINS!`;
+            document.getElementById('victoryTitle').className = `victory-title team${winner}-win`;
+
+            const stats = document.getElementById('victoryStats');
+            stats.innerHTML = `
+                <div class="victory-stat">
+                    <div class="victory-stat-value" style="color:var(--team1);">${gameData.team1Hits || 0}</div>
+                    <div class="victory-stat-label">${gameData.team1Name} HITS</div>
+                </div>
+                <div class="victory-stat">
+                    <div class="victory-stat-value" style="color:var(--team2);">${gameData.team2Hits || 0}</div>
+                    <div class="victory-stat-label">${gameData.team2Name} HITS</div>
+                </div>
+            `;
+
+            showScreen('victoryScreen');
+        }
+
+        // ============================================
+        // SCREEN MANAGEMENT
+        // ============================================
+        function showScreen(screenId) {
+            document.querySelectorAll('.setup-screen, .game-screen, .victory-screen').forEach(el => {
+                el.classList.remove('active');
+            });
+            document.getElementById(screenId).classList.add('active');
+        }
+
+        // ============================================
+        // INIT
+        // ============================================
+        window.addEventListener('load', () => {
+            showScreen('setupScreen');
+        });
+    </script>
+</body>
+</html>

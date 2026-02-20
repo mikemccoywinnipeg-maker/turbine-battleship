@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Turbine Battleship — Student</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #0a0e1a;
+            --bg-panel: #111827;
+            --bg-card: #1a2236;
+            --accent-cyan: #00f0ff;
+            --accent-red: #ff2d55;
+            --accent-green: #00e676;
+            --accent-yellow: #ffd600;
+            --team1: #00b4d8;
+            --team2: #ff6b2b;
+            --grid-line: rgba(0,240,255,0.15);
+            --text-primary: #e8eaed;
+            --text-secondary: #8892a4;
+        }
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body { font-family:'Rajdhani',sans-serif; background:var(--bg-dark); color:var(--text-primary); min-height:100vh; min-height:100dvh; -webkit-tap-highlight-color:transparent; }
+        .container { max-width:500px; margin:0 auto; padding:15px; }
+
+        .student-header { text-align:center; padding:10px 0; border-bottom:1px solid rgba(255,255,255,0.05); margin-bottom:15px; }
+        .student-header h1 { font-family:'Orbitron',sans-serif; font-size:1.3rem; font-weight:700; letter-spacing:4px; background:linear-gradient(135deg,var(--accent-cyan),#fff); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+        .student-info { font-family:'Share Tech Mono',monospace; font-size:0.75rem; color:var(--text-secondary); margin-top:4px; }
+        .team-badge { display:inline-block; padding:2px 12px; border-radius:12px; font-family:'Orbitron',sans-serif; font-size:0.7rem; font-weight:700; letter-spacing:2px; margin-top:6px; }
+        .team-badge.team1 { border:1px solid var(--team1); color:var(--team1); }
+        .team-badge.team2 { border:1px solid var(--team2); color:var(--team2); }
+
+        .screen { display:none; } .screen.active { display:block; }
+
+        .join-container { text-align:center; padding:40px 20px; }
+        .join-container h2 { font-family:'Orbitron',sans-serif; font-size:1.3rem; color:var(--accent-cyan); letter-spacing:3px; margin-bottom:25px; }
+        .join-input { width:100%; max-width:280px; padding:14px 20px; background:var(--bg-panel); border:2px solid rgba(0,240,255,0.2); border-radius:8px; color:var(--text-primary); font-family:'Orbitron',sans-serif; font-size:1.2rem; text-align:center; letter-spacing:6px; text-transform:uppercase; outline:none; }
+        .join-input:focus { border-color:var(--accent-cyan); box-shadow:0 0 20px rgba(0,240,255,0.15); }
+        .join-input::placeholder { color:rgba(255,255,255,0.15); letter-spacing:3px; font-size:0.9rem; }
+        .name-input { font-family:'Rajdhani',sans-serif; letter-spacing:1px; text-transform:none; font-size:1rem; margin-top:12px; }
+
+        .btn { display:inline-flex; align-items:center; justify-content:center; padding:14px 36px; border:none; border-radius:6px; font-family:'Orbitron',sans-serif; font-size:0.85rem; font-weight:700; letter-spacing:2px; cursor:pointer; transition:all 0.3s; text-transform:uppercase; margin-top:20px; }
+        .btn-primary { background:linear-gradient(135deg,var(--accent-cyan),#0088a3); color:white; box-shadow:0 4px 20px rgba(0,240,255,0.3); }
+        .btn-primary:disabled { opacity:0.3; cursor:not-allowed; }
+
+        .waiting-content { text-align:center; padding:40px 20px; }
+        .waiting-content h2 { font-family:'Orbitron',sans-serif; font-size:1.1rem; letter-spacing:3px; margin-bottom:10px; }
+        .pulse-ring { display:inline-block; width:60px; height:60px; border-radius:50%; border:3px solid var(--accent-cyan); animation:pulseRing 2s ease infinite; margin:25px 0; }
+        @keyframes pulseRing { 0%{transform:scale(0.8);opacity:1;} 50%{transform:scale(1.2);opacity:0.3;} 100%{transform:scale(0.8);opacity:1;} }
+
+        /* Ship Placement */
+        .placement-header { text-align:center; margin-bottom:12px; }
+        .placement-header h2 { font-family:'Orbitron',sans-serif; font-size:1rem; letter-spacing:2px; color:var(--accent-cyan); }
+        .ship-selector { display:flex; flex-direction:column; gap:6px; margin-bottom:12px; }
+        .ship-select-btn { display:flex; align-items:center; justify-content:space-between; padding:10px 14px; background:var(--bg-panel); border:1px solid rgba(255,255,255,0.08); border-radius:6px; cursor:pointer; color:var(--text-primary); font-family:'Rajdhani',sans-serif; transition:all 0.2s; }
+        .ship-select-btn.selected { border-color:var(--accent-cyan); background:rgba(0,240,255,0.08); }
+        .ship-select-btn.placed { border-color:var(--accent-green); opacity:0.5; }
+        .ship-select-name { font-weight:700; font-size:0.9rem; }
+        .ship-select-blocks { display:flex; gap:3px; }
+        .ship-select-block { width:18px; height:10px; background:var(--accent-cyan); border-radius:2px; opacity:0.6; }
+        .ship-select-btn.placed .ship-select-block { background:var(--accent-green); }
+        .placement-controls { display:flex; gap:10px; justify-content:center; margin-bottom:10px; }
+        .rotate-btn { padding:8px 20px; background:var(--bg-panel); border:1px solid rgba(255,255,255,0.15); border-radius:6px; color:var(--text-primary); font-family:'Rajdhani',sans-serif; font-size:0.85rem; font-weight:600; cursor:pointer; }
+
+        .placement-grid { display:grid; grid-template-columns:24px repeat(10,1fr); grid-template-rows:24px repeat(10,1fr); gap:2px; width:100%; max-width:400px; margin:0 auto; }
+        .placement-grid .grid-label { display:flex; align-items:center; justify-content:center; font-family:'Share Tech Mono',monospace; font-size:0.6rem; color:var(--text-secondary); }
+        .placement-grid .grid-cell { background:rgba(0,240,255,0.03); border:1px solid var(--grid-line); border-radius:2px; aspect-ratio:1; cursor:pointer; transition:all 0.15s; }
+        .placement-grid .grid-cell.ship-placed { background:rgba(0,240,255,0.2); border-color:rgba(0,240,255,0.4); }
+        .placement-grid .grid-cell.preview { background:rgba(0,240,255,0.12); border-color:rgba(0,240,255,0.3); }
+        .placement-grid .grid-cell.preview-invalid { background:rgba(255,45,85,0.15); border-color:rgba(255,45,85,0.3); }
+
+        /* Question */
+        .question-container { text-align:center; }
+        .question-container .category { font-family:'Share Tech Mono',monospace; font-size:0.75rem; color:var(--accent-cyan); letter-spacing:3px; text-transform:uppercase; margin-bottom:12px; }
+        .question-container .question { font-size:1.15rem; font-weight:600; line-height:1.5; margin-bottom:20px; padding:0 10px; }
+        .answer-buttons { display:flex; flex-direction:column; gap:10px; }
+        .answer-btn { width:100%; padding:16px 20px; background:var(--bg-panel); border:2px solid rgba(255,255,255,0.1); border-radius:8px; color:var(--text-primary); font-family:'Rajdhani',sans-serif; font-size:1rem; font-weight:600; text-align:left; cursor:pointer; transition:all 0.2s; }
+        .answer-btn.selected { border-color:var(--accent-cyan); background:rgba(0,240,255,0.1); }
+        .answer-btn.correct { border-color:var(--accent-green); background:rgba(0,230,118,0.15); color:var(--accent-green); }
+        .answer-btn.wrong { border-color:var(--accent-red); background:rgba(255,45,85,0.1); color:var(--accent-red); }
+        .answer-btn:disabled { cursor:default; opacity:0.7; }
+        .timer-bar-container { width:100%; height:6px; background:rgba(255,255,255,0.05); border-radius:3px; margin-bottom:15px; overflow:hidden; }
+        .timer-bar { height:100%; background:var(--accent-cyan); border-radius:3px; transition:width 1s linear; width:100%; }
+        .timer-bar.warning { background:var(--accent-yellow); }
+        .timer-bar.danger { background:var(--accent-red); }
+        .submitted-msg { font-family:'Orbitron',sans-serif; font-size:1.1rem; color:var(--accent-green); letter-spacing:3px; margin-top:20px; }
+
+        /* Battle Status */
+        .battle-status { text-align:center; padding:20px; }
+        .battle-status .turn-info { font-family:'Orbitron',sans-serif; font-size:1.1rem; letter-spacing:2px; margin-bottom:15px; }
+        .mini-grid { display:inline-grid; grid-template-columns:18px repeat(10,1fr); grid-template-rows:18px repeat(10,1fr); gap:1px; width:100%; max-width:320px; margin:10px auto; }
+        .mini-grid .grid-label { display:flex; align-items:center; justify-content:center; font-family:'Share Tech Mono',monospace; font-size:0.5rem; color:var(--text-secondary); }
+        .mini-grid .grid-cell { background:rgba(0,240,255,0.03); border:1px solid rgba(0,240,255,0.1); border-radius:1px; aspect-ratio:1; }
+        .mini-grid .grid-cell.ship-placed { background:rgba(0,240,255,0.15); border-color:rgba(0,240,255,0.3); }
+        .mini-grid .grid-cell.hit { background:var(--accent-red); border-color:var(--accent-red); }
+        .mini-grid .grid-cell.miss { background:rgba(255,255,255,0.08); }
+        .mini-grid .grid-cell.sunk { background:#9d174d; border-color:#9d174d; }
+
+        .result-flash { position:fixed; top:0;left:0;right:0;bottom:0; display:none; justify-content:center; align-items:center; background:rgba(0,0,0,0.9); z-index:100; flex-direction:column; }
+        .result-flash.active { display:flex; }
+        .result-flash-text { font-family:'Orbitron',sans-serif; font-size:3rem; font-weight:900; letter-spacing:6px; }
+        .result-flash-text.hit { color:var(--accent-red); }
+        .result-flash-text.miss { color:var(--text-secondary); }
+        .result-flash-text.sunk { color:var(--accent-yellow); }
+        .result-flash-text.wasted { color:var(--accent-red); opacity:0.7; }
+        .result-flash-sub { font-family:'Share Tech Mono',monospace; font-size:0.9rem; color:var(--text-secondary); margin-top:10px; letter-spacing:2px; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="student-header">
+        <h1>TURBINE BATTLESHIP</h1>
+        <div class="student-info" id="studentInfo"></div>
+        <div class="team-badge" id="teamBadge" style="display:none;"></div>
+    </div>
+
+    <!-- JOIN -->
+    <div class="screen active" id="joinScreen">
+        <div class="join-container">
+            <h2>JOIN GAME</h2>
+            <input class="join-input" id="roomInput" placeholder="ROOM CODE" maxlength="5" autocomplete="off" />
+            <br>
+            <input class="join-input name-input" id="nameInput" placeholder="Your Name" autocomplete="off" />
+            <br>
+            <button class="btn btn-primary" onclick="joinGame()">⚡ JOIN</button>
+        </div>
+    </div>
+
+    <!-- WAITING -->
+    <div class="screen" id="waitingScreen">
+        <div class="waiting-content">
+            <h2 style="color:var(--accent-green);">YOU'RE IN!</h2>
+            <div class="pulse-ring"></div>
+            <p style="color:var(--text-secondary);" id="waitingText">Waiting for the instructor to start...</p>
+        </div>
+    </div>
+
+    <!-- PLACEMENT -->
+    <div class="screen" id="placementScreen">
+        <div class="placement-header">
+            <h2>🔧 PLACE YOUR SHIPS</h2>
+            <p style="color:var(--text-secondary);font-size:0.8rem;margin-top:4px;">Select a ship, then tap the grid</p>
+        </div>
+        <div class="ship-selector" id="shipSelector"></div>
+        <div class="placement-controls">
+            <button class="rotate-btn" onclick="toggleOrientation()">↻ ROTATE</button>
+            <button class="rotate-btn" onclick="clearPlacements()">✕ CLEAR</button>
+        </div>
+        <div class="placement-grid" id="placementGrid"></div>
+        <div style="text-align:center;margin-top:15px;">
+            <button class="btn btn-primary" id="confirmShipsBtn" onclick="confirmShips()" disabled>✓ CONFIRM FLEET</button>
+        </div>
+    </div>
+
+    <!-- BATTLE -->
+    <div class="screen" id="battleScreen">
+        <div class="battle-status">
+            <div class="turn-info" id="turnInfo">Waiting...</div>
+            <p style="color:var(--text-secondary);font-size:0.85rem;margin-bottom:15px;" id="battleSubtext">Watch the main screen</p>
+            <p style="color:var(--text-secondary);font-size:0.75rem;font-family:'Share Tech Mono';letter-spacing:2px;margin-bottom:8px;">YOUR FLEET</p>
+            <div class="mini-grid" id="myFleetGrid"></div>
+        </div>
+    </div>
+
+    <!-- QUESTION -->
+    <div class="screen" id="questionScreen">
+        <div class="question-container">
+            <div class="timer-bar-container"><div class="timer-bar" id="studentTimerBar"></div></div>
+            <div class="category" id="studentCategory">FUEL SYSTEMS</div>
+            <div class="question" id="studentQuestion">Loading...</div>
+            <div class="answer-buttons" id="studentAnswers"></div>
+            <div class="submitted-msg" id="submittedMsg" style="display:none;">✓ ANSWER LOCKED IN</div>
+        </div>
+    </div>
+
+    <!-- VICTORY -->
+    <div class="screen" id="studentVictoryScreen">
+        <div class="waiting-content">
+            <h2 id="studentVictoryText" style="font-size:1.5rem;"></h2>
+            <p style="color:var(--text-secondary);margin-top:10px;" id="studentVictorySub"></p>
+        </div>
+    </div>
+</div>
+
+<div class="result-flash" id="resultFlash">
+    <div class="result-flash-text" id="resultFlashText">HIT!</div>
+    <div class="result-flash-sub" id="resultFlashSub"></div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
+<script>
+    firebase.initializeApp({
+        apiKey: "AIzaSyCurExqdj1MJhr3QawyfkpylfNC881ENFA",
+        authDomain: "turbine-battleship-20e23.firebaseapp.com",
+        databaseURL: "https://turbine-battleship-20e23-default-rtdb.firebaseio.com",
+        projectId: "turbine-battleship-20e23",
+        storageBucket: "turbine-battleship-20e23.firebasestorage.app",
+        messagingSenderId: "821986197860",
+        appId: "1:821986197860:web:6c91fda1e0cc8cf4c1ba71"
+    });
+    const db = firebase.database();
+
+    const GRID_SIZE = 10;
+    const COLS = ['A','B','C','D','E','F','G','H','I','J'];
+    const SHIPS = [
+        { name: 'Turbine Assembly', size: 5 },
+        { name: 'Combustion Liner', size: 4 },
+        { name: 'Compressor Rotor', size: 3 },
+        { name: 'Fuel Control Unit', size: 3 },
+        { name: 'Igniter Plug', size: 2 }
+    ];
+    const QUESTION_TIME = 30;
+
+    let roomRef = null, gameData = null, playerName = '', playerTeam = 0, roomCode = '';
+    let selectedShipIndex = -1, orientation = 'horizontal', placedShips = [];
+    let hasSubmittedAnswer = false, currentQuestionIndex = -1, studentTimerInterval = null;
+
+    // ========== JOIN ==========
+    function joinGame() {
+        roomCode = document.getElementById('roomInput').value.trim().toUpperCase();
+        playerName = document.getElementById('nameInput').value.trim();
+        if (!roomCode || !playerName) { alert('Enter room code and your name'); return; }
+
+        roomRef = db.ref('battleship/' + roomCode);
+        roomRef.once('value').then(snap => {
+            gameData = snap.val();
+            if (!gameData) { alert('Room not found!'); return; }
+
+            const t1 = gameData.team1Players || [];
+            const t2 = gameData.team2Players || [];
+            let foundTeam = 0, foundName = '';
+
+            for (const n of t1) { if (n.toLowerCase() === playerName.toLowerCase()) { foundTeam = 1; foundName = n; break; } }
+            if (!foundTeam) { for (const n of t2) { if (n.toLowerCase() === playerName.toLowerCase()) { foundTeam = 2; foundName = n; break; } } }
+            if (!foundTeam) { alert(`Name "${playerName}" not found in either team.`); return; }
+
+            playerTeam = foundTeam;
+            playerName = foundName;
+
+            const joinKey = foundTeam === 1 ? 'team1Joined' : 'team2Joined';
+            roomRef.child(joinKey).child(playerName).set(playerName);
+
+            document.getElementById('studentInfo').textContent = playerName;
+            const badge = document.getElementById('teamBadge');
+            badge.style.display = 'inline-block';
+            badge.className = `team-badge team${playerTeam}`;
+            badge.textContent = playerTeam === 1 ? gameData.team1Name : gameData.team2Name;
+
+            showScreen('waitingScreen');
+            listenForUpdates();
+        });
+    }
+
+    // Auto-fill room code from URL
+    window.addEventListener('load', () => {
+        const params = new URLSearchParams(window.location.search);
+        const room = params.get('room');
+        if (room) document.getElementById('roomInput').value = room;
+    });
+
+    function listenForUpdates() {
+        roomRef.on('value', snap => {
+            const prev = gameData;
+            gameData = snap.val();
+            if (!gameData) return;
+            handlePhaseChange(prev);
+        });
+    }
+
+    function handlePhaseChange(prev) {
+        const phase = gameData.phase;
+        if (phase === 'placement') {
+            const cur = document.querySelector('.screen.active');
+            if (cur && cur.id !== 'placementScreen' && !placedShips.length) { initPlacement(); showScreen('placementScreen'); }
+            // If already confirmed, stay on waiting
+            if (placedShips.length >= 5 && cur && cur.id === 'waitingScreen') return;
+        } else if (phase === 'battle') {
+            handleBattleUpdate(prev);
+        } else if (phase === 'victory') {
+            showVictory();
+        }
+    }
+
+    // ========== SHIP PLACEMENT ==========
+    function initPlacement() {
+        placedShips = []; selectedShipIndex = 0; orientation = 'horizontal';
+        const selector = document.getElementById('shipSelector');
+        selector.innerHTML = '';
+        SHIPS.forEach((ship, i) => {
+            const btn = document.createElement('div');
+            btn.className = `ship-select-btn ${i === 0 ? 'selected' : ''}`;
+            btn.id = `ship-btn-${i}`;
+            btn.onclick = () => selectShip(i);
+            const nameSpan = document.createElement('span');
+            nameSpan.className = 'ship-select-name';
+            nameSpan.textContent = ship.name;
+            const blocks = document.createElement('div');
+            blocks.className = 'ship-select-blocks';
+            for (let b = 0; b < ship.size; b++) { const bl = document.createElement('div'); bl.className = 'ship-select-block'; blocks.appendChild(bl); }
+            btn.appendChild(nameSpan); btn.appendChild(blocks);
+            selector.appendChild(btn);
+        });
+        buildPlacementGrid();
+    }
+
+    function buildPlacementGrid() {
+        const grid = document.getElementById('placementGrid');
+        grid.innerHTML = '';
+        const corner = document.createElement('div'); corner.className = 'grid-label'; grid.appendChild(corner);
+        for (let c = 0; c < GRID_SIZE; c++) { const l = document.createElement('div'); l.className = 'grid-label'; l.textContent = COLS[c]; grid.appendChild(l); }
+        for (let r = 0; r < GRID_SIZE; r++) {
+            const rl = document.createElement('div'); rl.className = 'grid-label'; rl.textContent = String(r+1); grid.appendChild(rl);
+            for (let c = 0; c < GRID_SIZE; c++) {
+                const cell = document.createElement('div');
+                cell.className = 'grid-cell'; cell.dataset.row = r; cell.dataset.col = c;
+                cell.addEventListener('click', () => placeShipAt(r, c));
+                grid.appendChild(cell);
+            }
+        }
+    }
+
+    function selectShip(i) {
+        if (placedShips.find(p => p.shipIndex === i)) return;
+        selectedShipIndex = i;
+        document.querySelectorAll('.ship-select-btn').forEach((btn, idx) => {
+            if (placedShips.find(p => p.shipIndex === idx)) btn.className = 'ship-select-btn placed';
+            else btn.className = `ship-select-btn ${idx === i ? 'selected' : ''}`;
+        });
+    }
+
+    function toggleOrientation() { orientation = orientation === 'horizontal' ? 'vertical' : 'horizontal'; }
+
+    function getShipCells(row, col, size) {
+        const cells = [];
+        for (let i = 0; i < size; i++) {
+            cells.push({ row: orientation === 'vertical' ? row + i : row, col: orientation === 'horizontal' ? col + i : col });
+        }
+        return cells;
+    }
+
+    function isValidPlacement(cells) {
+        for (const c of cells) { if (c.row < 0 || c.row >= GRID_SIZE || c.col < 0 || c.col >= GRID_SIZE) return false; }
+        for (const placed of placedShips) { for (const pc of placed.cells) { for (const nc of cells) { if (pc.row === nc.row && pc.col === nc.col) return false; } } }
+        return true;
+    }
+
+    function placeShipAt(row, col) {
+        if (selectedShipIndex < 0 || placedShips.find(p => p.shipIndex === selectedShipIndex)) return;
+        const ship = SHIPS[selectedShipIndex];
+        const cells = getShipCells(row, col, ship.size);
+        if (!isValidPlacement(cells)) return;
+
+        placedShips.push({ shipIndex: selectedShipIndex, name: ship.name, cells });
+        cells.forEach(c => {
+            const el = document.querySelector(`#placementGrid .grid-cell[data-row="${c.row}"][data-col="${c.col}"]`);
+            if (el) el.classList.add('ship-placed');
+        });
+
+        const btn = document.getElementById(`ship-btn-${selectedShipIndex}`);
+        if (btn) btn.className = 'ship-select-btn placed';
+
+        const next = SHIPS.findIndex((s, i) => !placedShips.find(p => p.shipIndex === i));
+        if (next >= 0) selectShip(next);
+        else { selectedShipIndex = -1; document.getElementById('confirmShipsBtn').disabled = false; }
+    }
+
+    function clearPlacements() {
+        placedShips = []; selectedShipIndex = 0;
+        document.querySelectorAll('#placementGrid .grid-cell').forEach(el => el.classList.remove('ship-placed','preview','preview-invalid'));
+        document.querySelectorAll('.ship-select-btn').forEach((btn, i) => btn.className = `ship-select-btn ${i === 0 ? 'selected' : ''}`);
+        document.getElementById('confirmShipsBtn').disabled = true;
+    }
+
+    function confirmShips() {
+        if (placedShips.length < 5) return;
+        const shipData = placedShips.map(p => ({ name: p.name, cells: p.cells }));
+        const shipKey = playerTeam === 1 ? 'team1Ships' : 'team2Ships';
+        const countKey = playerTeam === 1 ? 'team1ShipsPlaced' : 'team2ShipsPlaced';
+        roomRef.child(shipKey).set(shipData);
+        roomRef.child(countKey).set(5);
+        showScreen('waitingScreen');
+        document.getElementById('waitingText').textContent = 'Fleet deployed! Waiting for the other team...';
+    }
+
+    // ========== BATTLE ==========
+    function handleBattleUpdate(prev) {
+        if (gameData.phase !== 'battle') return;
+
+        detectShotResult(prev);
+
+        const currentQ = gameData.currentQuestion;
+        const attackingTeam = gameData.currentTurn;
+
+        if (currentQ !== false && currentQ !== null && currentQ !== undefined && attackingTeam === playerTeam) {
+            if (currentQ !== currentQuestionIndex) {
+                currentQuestionIndex = currentQ;
+                hasSubmittedAnswer = false;
+                showStudentQuestion(currentQ);
+                showScreen('questionScreen');
+            }
+        } else {
+            const cur = document.querySelector('.screen.active');
+            if (!cur || (cur.id !== 'questionScreen') || (currentQ === false || currentQ === null || currentQ === undefined)) {
+                showBattleStatus();
+                showScreen('battleScreen');
+            }
+        }
+    }
+
+    function detectShotResult(prev) {
+        if (!prev || !gameData.shotHistory) return;
+        const prevKeys = Object.keys(prev.shotHistory || {});
+        const newKeys = Object.keys(gameData.shotHistory || {});
+        if (newKeys.length > prevKeys.length) {
+            for (const key of newKeys) {
+                if (!prevKeys.includes(key)) { showResultFlash(gameData.shotHistory[key].result, gameData.shotHistory[key].shipName); break; }
+            }
+        }
+    }
+
+    function showResultFlash(result, shipName) {
+        const flash = document.getElementById('resultFlash');
+        const text = document.getElementById('resultFlashText');
+        const sub = document.getElementById('resultFlashSub');
+        text.textContent = result === 'hit' ? 'HIT!' : result === 'sunk' ? 'SUNK!' : 'MISS';
+        text.className = `result-flash-text ${result}`;
+        sub.textContent = shipName && result !== 'miss' ? shipName : '';
+        flash.classList.add('active');
+        setTimeout(() => { flash.classList.remove('active'); showBattleStatus(); showScreen('battleScreen'); }, 2500);
+    }
+
+    function showStudentQuestion(qIndex) {
+        const q = gameData.questions[qIndex];
+        if (!q) return;
+
+        document.getElementById('studentCategory').textContent = q.category.toUpperCase();
+        document.getElementById('studentQuestion').textContent = q.q;
+        document.getElementById('submittedMsg').style.display = 'none';
+
+        const container = document.getElementById('studentAnswers');
+        container.innerHTML = '';
+        q.answers.forEach((ans, i) => {
+            const btn = document.createElement('button');
+            btn.className = 'answer-btn';
+            btn.textContent = `${String.fromCharCode(65+i)}) ${ans}`;
+            btn.onclick = () => submitAnswer(i, qIndex);
+            container.appendChild(btn);
+        });
+
+        // Timer
+        let timeLeft = QUESTION_TIME;
+        const bar = document.getElementById('studentTimerBar');
+        bar.style.width = '100%'; bar.className = 'timer-bar';
+        clearInterval(studentTimerInterval);
+        studentTimerInterval = setInterval(() => {
+            timeLeft--;
+            const pct = (timeLeft / QUESTION_TIME) * 100;
+            bar.style.width = pct + '%';
+            if (pct <= 20) bar.className = 'timer-bar danger';
+            else if (pct <= 50) bar.className = 'timer-bar warning';
+            if (timeLeft <= 0) clearInterval(studentTimerInterval);
+        }, 1000);
+    }
+
+    function submitAnswer(answerIndex, qIndex) {
+        if (hasSubmittedAnswer) return;
+        hasSubmittedAnswer = true;
+
+        // Highlight selection
+        document.querySelectorAll('.answer-btn').forEach((btn, i) => {
+            btn.disabled = true;
+            if (i === answerIndex) btn.classList.add('selected');
+        });
+
+        document.getElementById('submittedMsg').style.display = 'block';
+        clearInterval(studentTimerInterval);
+
+        // Send to Firebase
+        roomRef.child('responses').child(playerName).set(answerIndex);
+    }
+
+    function showBattleStatus() {
+        if (!gameData) return;
+        const turn = gameData.currentTurn;
+        const turnName = turn === 1 ? gameData.team1Name : gameData.team2Name;
+        const isMyTurn = turn === playerTeam;
+
+        document.getElementById('turnInfo').textContent = isMyTurn ? "YOUR TEAM'S TURN" : `${turnName}'s turn`;
+        document.getElementById('turnInfo').style.color = isMyTurn ? 'var(--accent-green)' : 'var(--text-secondary)';
+        document.getElementById('battleSubtext').textContent = isMyTurn ? 'Watch the main screen — a question is coming!' : 'Waiting for the other team...';
+
+        buildMiniFleetGrid();
+    }
+
+    function buildMiniFleetGrid() {
+        const grid = document.getElementById('myFleetGrid');
+        grid.innerHTML = '';
+
+        const corner = document.createElement('div'); corner.className = 'grid-label'; grid.appendChild(corner);
+        for (let c = 0; c < GRID_SIZE; c++) { const l = document.createElement('div'); l.className = 'grid-label'; l.textContent = COLS[c]; grid.appendChild(l); }
+
+        const myShips = playerTeam === 1 ? gameData.team1Ships : gameData.team2Ships;
+        const shipCells = new Set();
+        if (myShips) { myShips.forEach(ship => { if (ship && ship.cells) ship.cells.forEach(c => shipCells.add(`${c.row}-${c.col}`)); }); }
+
+        // Find shots against my team
+        const shotsAgainstMe = {};
+        if (gameData.shotHistory) {
+            Object.values(gameData.shotHistory).forEach(shot => {
+                if (shot.targetTeam === playerTeam) shotsAgainstMe[`${shot.row}-${shot.col}`] = shot.result;
+            });
+        }
+
+        for (let r = 0; r < GRID_SIZE; r++) {
+            const rl = document.createElement('div'); rl.className = 'grid-label'; rl.textContent = String(r+1); grid.appendChild(rl);
+            for (let c = 0; c < GRID_SIZE; c++) {
+                const cell = document.createElement('div');
+                cell.className = 'grid-cell';
+                const key = `${r}-${c}`;
+                if (shotsAgainstMe[key]) cell.classList.add(shotsAgainstMe[key]);
+                else if (shipCells.has(key)) cell.classList.add('ship-placed');
+                grid.appendChild(cell);
+            }
+        }
+    }
+
+    function showVictory() {
+        const winner = gameData.winner;
+        const winnerName = winner === 1 ? gameData.team1Name : gameData.team2Name;
+        const isMyTeam = winner === playerTeam;
+
+        document.getElementById('studentVictoryText').textContent = isMyTeam ? '🎉 YOUR TEAM WINS!' : `${winnerName} wins`;
+        document.getElementById('studentVictoryText').style.color = isMyTeam ? 'var(--accent-green)' : 'var(--accent-red)';
+        document.getElementById('studentVictorySub').textContent = isMyTeam ? 'All enemy ships destroyed!' : 'Better luck next time!';
+        showScreen('studentVictoryScreen');
+    }
+
+    // ========== SCREEN MANAGEMENT ==========
+    function showScreen(id) {
+        document.querySelectorAll('.screen').forEach(el => el.classList.remove('active'));
+        document.getElementById(id).classList.add('active');
+    }
+</script>
+</body>
+</html>
