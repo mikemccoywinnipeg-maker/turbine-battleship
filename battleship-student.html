@@ -129,6 +129,21 @@
             <button class="btn btn-primary" onclick="joinGame()">⚡ JOIN</button>
         </div>
     </div>
+    <script>
+    // Auto-fill room code from URL - runs immediately
+    (function() {
+        try {
+            var params = new URLSearchParams(window.location.search);
+            var room = params.get('room');
+            if (room) {
+                document.getElementById('roomInput').value = room;
+                document.getElementById('roomInputWrap').style.display = 'none';
+                document.getElementById('roomBadge').style.display = 'block';
+                document.getElementById('roomBadge').textContent = 'ROOM: ' + room;
+            }
+        } catch(e) { console.log('Auto-fill error:', e); }
+    })();
+    </script>
 
     <!-- WAITING -->
     <div class="screen" id="waitingScreen">
@@ -257,18 +272,7 @@
         });
     }
 
-    // Auto-fill room code from URL
-    window.addEventListener('load', () => {
-        const params = new URLSearchParams(window.location.search);
-        const room = params.get('room');
-        if (room) {
-            document.getElementById('roomInput').value = room;
-            document.getElementById('roomInputWrap').style.display = 'none';
-            document.getElementById('roomBadge').style.display = 'block';
-            document.getElementById('roomBadge').textContent = 'ROOM: ' + room;
-            document.getElementById('nameInput').focus();
-        }
-    });
+    // Auto-fill handled by inline script above join screen
 
     function listenForUpdates() {
         roomRef.on('value', snap => {
