@@ -119,8 +119,11 @@
     <div class="screen active" id="joinScreen">
         <div class="join-container">
             <h2>JOIN GAME</h2>
-            <input class="join-input" id="roomInput" placeholder="ROOM CODE" maxlength="5" autocomplete="off" />
-            <br>
+            <div id="roomInputWrap">
+                <input class="join-input" id="roomInput" placeholder="ROOM CODE" maxlength="5" autocomplete="off" />
+                <br>
+            </div>
+            <div id="roomBadge" style="display:none;font-family:'Orbitron',sans-serif;font-size:1.2rem;letter-spacing:5px;color:var(--accent-cyan);margin-bottom:15px;"></div>
             <input class="join-input name-input" id="nameInput" placeholder="Your Name" autocomplete="off" />
             <br>
             <button class="btn btn-primary" onclick="joinGame()">⚡ JOIN</button>
@@ -140,12 +143,12 @@
     <div class="screen" id="placementScreen">
         <div class="placement-header">
             <h2>🔧 PLACE YOUR SHIPS</h2>
-            <p style="color:var(--text-secondary);font-size:0.8rem;margin-top:4px;">Select a ship, then tap the grid</p>
+            <p style="color:var(--text-secondary);font-size:0.8rem;margin-top:4px;" id="placementInstructions">Select a ship, then tap the grid to preview</p>
         </div>
         <div class="ship-selector" id="shipSelector"></div>
         <div class="placement-controls">
-            <button class="rotate-btn" onclick="toggleOrientation()">↻ ROTATE</button>
-            <button class="rotate-btn" onclick="clearPlacements()">✕ CLEAR</button>
+            <button class="rotate-btn" onclick="clearPlacements()" id="clearBtn">✕ CLEAR ALL</button>
+            <button class="rotate-btn" onclick="confirmCurrentShip()" id="confirmPlaceBtn" style="display:none;background:rgba(0,230,118,0.1);border-color:var(--accent-green);color:var(--accent-green);">✓ LOCK SHIP</button>
         </div>
         <div class="placement-grid" id="placementGrid"></div>
         <div style="text-align:center;margin-top:15px;">
@@ -258,7 +261,13 @@
     window.addEventListener('load', () => {
         const params = new URLSearchParams(window.location.search);
         const room = params.get('room');
-        if (room) document.getElementById('roomInput').value = room;
+        if (room) {
+            document.getElementById('roomInput').value = room;
+            document.getElementById('roomInputWrap').style.display = 'none';
+            document.getElementById('roomBadge').style.display = 'block';
+            document.getElementById('roomBadge').textContent = 'ROOM: ' + room;
+            document.getElementById('nameInput').focus();
+        }
     });
 
     function listenForUpdates() {
@@ -316,7 +325,7 @@
             for (let c = 0; c < GRID_SIZE; c++) {
                 const cell = document.createElement('div');
                 cell.className = 'grid-cell'; cell.dataset.row = r; cell.dataset.col = c;
-                cell.addEventListener('click', () => placeShipAt(r, c));
+                cell.addEventListener('click', () => handleGridTap(r, c));
                 grid.appendChild(cell);
             }
         }
@@ -325,18 +334,26 @@
     function selectShip(i) {
         if (placedShips.find(p => p.shipIndex === i)) return;
         selectedShipIndex = i;
+        previewOrientation = 'horizontal';
+        previewRow = -1;
+        previewCol = -1;
+        clearPreview();
+        hideConfirmPlaceBtn();
+        document.getElementById('placementInstructions').textContent = `Tap the grid to place ${SHIPS[i].name} (${SHIPS[i].size} cells)`;
         document.querySelectorAll('.ship-select-btn').forEach((btn, idx) => {
             if (placedShips.find(p => p.shipIndex === idx)) btn.className = 'ship-select-btn placed';
             else btn.className = `ship-select-btn ${idx === i ? 'selected' : ''}`;
         });
     }
 
-    function toggleOrientation() { orientation = orientation === 'horizontal' ? 'vertical' : 'horizontal'; }
+    let previewOrientation = 'horizontal';
+    let previewRow = -1;
+    let previewCol = -1;
 
-    function getShipCells(row, col, size) {
+    function getShipCellsAt(row, col, size, orient) {
         const cells = [];
         for (let i = 0; i < size; i++) {
-            cells.push({ row: orientation === 'vertical' ? row + i : row, col: orientation === 'horizontal' ? col + i : col });
+            cells.push({ row: orient === 'vertical' ? row + i : row, col: orient === 'horizontal' ? col + i : col });
         }
         return cells;
     }
@@ -347,13 +364,80 @@
         return true;
     }
 
-    function placeShipAt(row, col) {
+    function handleGridTap(row, col) {
         if (selectedShipIndex < 0 || placedShips.find(p => p.shipIndex === selectedShipIndex)) return;
+
         const ship = SHIPS[selectedShipIndex];
-        const cells = getShipCells(row, col, ship.size);
+
+        if (previewRow === row && previewCol === col) {
+            // Same cell tapped again — rotate
+            previewOrientation = previewOrientation === 'horizontal' ? 'vertical' : 'horizontal';
+        } else {
+            // New cell — place preview here, reset to horizontal
+            previewRow = row;
+            previewCol = col;
+            previewOrientation = 'horizontal';
+        }
+
+        // Try current orientation, if invalid try the other
+        let cells = getShipCellsAt(row, col, ship.size, previewOrientation);
+        let valid = isValidPlacement(cells);
+
+        if (!valid) {
+            // Try the other orientation automatically
+            const altOrient = previewOrientation === 'horizontal' ? 'vertical' : 'horizontal';
+            const altCells = getShipCellsAt(row, col, ship.size, altOrient);
+            if (isValidPlacement(altCells)) {
+                previewOrientation = altOrient;
+                cells = altCells;
+                valid = true;
+            }
+        }
+
+        // Draw preview
+        clearPreview();
+        cells.forEach(c => {
+            if (c.row >= 0 && c.row < GRID_SIZE && c.col >= 0 && c.col < GRID_SIZE) {
+                const el = document.querySelector(`#placementGrid .grid-cell[data-row="${c.row}"][data-col="${c.col}"]`);
+                if (el && !el.classList.contains('ship-placed')) {
+                    el.classList.add(valid ? 'preview' : 'preview-invalid');
+                }
+            }
+        });
+
+        if (valid) {
+            showConfirmPlaceBtn();
+            const dir = previewOrientation === 'horizontal' ? '→ horizontal' : '↓ vertical';
+            document.getElementById('placementInstructions').textContent = `${ship.name} at ${COLS[col]}${row+1} (${dir}) — tap same spot to rotate, or tap LOCK SHIP`;
+        } else {
+            hideConfirmPlaceBtn();
+            document.getElementById('placementInstructions').textContent = `Can't place here — try another spot`;
+        }
+    }
+
+    function clearPreview() {
+        document.querySelectorAll('#placementGrid .preview, #placementGrid .preview-invalid').forEach(el => {
+            el.classList.remove('preview', 'preview-invalid');
+        });
+    }
+
+    function showConfirmPlaceBtn() {
+        document.getElementById('confirmPlaceBtn').style.display = 'inline-block';
+    }
+
+    function hideConfirmPlaceBtn() {
+        document.getElementById('confirmPlaceBtn').style.display = 'none';
+    }
+
+    function confirmCurrentShip() {
+        if (selectedShipIndex < 0 || previewRow < 0) return;
+        const ship = SHIPS[selectedShipIndex];
+        const cells = getShipCellsAt(previewRow, previewCol, ship.size, previewOrientation);
         if (!isValidPlacement(cells)) return;
 
+        // Lock it in
         placedShips.push({ shipIndex: selectedShipIndex, name: ship.name, cells });
+        clearPreview();
         cells.forEach(c => {
             const el = document.querySelector(`#placementGrid .grid-cell[data-row="${c.row}"][data-col="${c.col}"]`);
             if (el) el.classList.add('ship-placed');
@@ -362,16 +446,30 @@
         const btn = document.getElementById(`ship-btn-${selectedShipIndex}`);
         if (btn) btn.className = 'ship-select-btn placed';
 
+        hideConfirmPlaceBtn();
+        previewRow = -1;
+        previewCol = -1;
+
+        // Auto-select next unplaced ship
         const next = SHIPS.findIndex((s, i) => !placedShips.find(p => p.shipIndex === i));
-        if (next >= 0) selectShip(next);
-        else { selectedShipIndex = -1; document.getElementById('confirmShipsBtn').disabled = false; }
+        if (next >= 0) {
+            selectShip(next);
+        } else {
+            selectedShipIndex = -1;
+            document.getElementById('confirmShipsBtn').disabled = false;
+            document.getElementById('placementInstructions').textContent = 'All ships placed! Hit CONFIRM FLEET when ready.';
+        }
     }
 
     function clearPlacements() {
         placedShips = []; selectedShipIndex = 0;
+        previewRow = -1; previewCol = -1; previewOrientation = 'horizontal';
+        clearPreview();
+        hideConfirmPlaceBtn();
         document.querySelectorAll('#placementGrid .grid-cell').forEach(el => el.classList.remove('ship-placed','preview','preview-invalid'));
         document.querySelectorAll('.ship-select-btn').forEach((btn, i) => btn.className = `ship-select-btn ${i === 0 ? 'selected' : ''}`);
         document.getElementById('confirmShipsBtn').disabled = true;
+        document.getElementById('placementInstructions').textContent = `Tap the grid to place ${SHIPS[0].name} (${SHIPS[0].size} cells)`;
     }
 
     function confirmShips() {
