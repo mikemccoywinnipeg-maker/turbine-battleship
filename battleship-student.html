@@ -247,27 +247,13 @@
             gameData = snap.val();
             if (!gameData) { alert('Room not found!'); return; }
 
-            const t1 = gameData.team1Players || [];
-            const t2 = gameData.team2Players || [];
-            let foundTeam = 0, foundName = '';
-
-            for (const n of t1) { if (n.toLowerCase() === playerName.toLowerCase()) { foundTeam = 1; foundName = n; break; } }
-            if (!foundTeam) { for (const n of t2) { if (n.toLowerCase() === playerName.toLowerCase()) { foundTeam = 2; foundName = n; break; } } }
-            if (!foundTeam) { alert(`Name "${playerName}" not found in either team.`); return; }
-
-            playerTeam = foundTeam;
-            playerName = foundName;
-
-            const joinKey = foundTeam === 1 ? 'team1Joined' : 'team2Joined';
-            roomRef.child(joinKey).child(playerName).set(playerName);
+            // Register in the players list
+            roomRef.child('players').child(playerName).set(playerName);
 
             document.getElementById('studentInfo').textContent = playerName;
-            const badge = document.getElementById('teamBadge');
-            badge.style.display = 'inline-block';
-            badge.className = `team-badge team${playerTeam}`;
-            badge.textContent = playerTeam === 1 ? gameData.team1Name : gameData.team2Name;
 
             showScreen('waitingScreen');
+            document.getElementById('waitingText').textContent = 'Waiting for teams to be assigned...';
             listenForUpdates();
         });
     }
@@ -285,10 +271,26 @@
 
     function handlePhaseChange(prev) {
         const phase = gameData.phase;
-        if (phase === 'placement') {
+
+        // Check if we've been assigned to a team
+        if (!playerTeam) {
+            const t1 = gameData.team1Players || [];
+            const t2 = gameData.team2Players || [];
+            if (t1.includes(playerName)) playerTeam = 1;
+            else if (t2.includes(playerName)) playerTeam = 2;
+
+            if (playerTeam) {
+                const badge = document.getElementById('teamBadge');
+                badge.style.display = 'inline-block';
+                badge.className = `team-badge team${playerTeam}`;
+                badge.textContent = playerTeam === 1 ? gameData.team1Name : gameData.team2Name;
+                document.getElementById('waitingText').textContent = 'You are on ' + (playerTeam === 1 ? gameData.team1Name : gameData.team2Name) + '!';
+            }
+        }
+
+        if (phase === 'placement' && playerTeam) {
             const cur = document.querySelector('.screen.active');
             if (cur && cur.id !== 'placementScreen' && !placedShips.length) { initPlacement(); showScreen('placementScreen'); }
-            // If already confirmed, stay on waiting
             if (placedShips.length >= 5 && cur && cur.id === 'waitingScreen') return;
         } else if (phase === 'battle') {
             handleBattleUpdate(prev);
