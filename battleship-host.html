@@ -922,9 +922,6 @@
             <div class="setup-container">
                 <h2>⚙ Mission Briefing</h2>
 
-                <label class="setup-label">PASTE STUDENT ROSTER (ONE NAME PER LINE)</label>
-                <textarea class="setup-textarea" id="studentNames" placeholder="John Smith&#10;Jane Doe&#10;Bob Wilson&#10;..."></textarea>
-
                 <div class="team-names-row">
                     <div>
                         <label class="setup-label" style="color:var(--team1);">TEAM 1 NAME</label>
@@ -958,13 +955,32 @@
                     </div>
                 </div>
                 <div class="players-joined">
-                    <span id="joinedCount">0</span> / <span id="totalCount">0</span> crew members aboard
+                    <span id="joinedCount">0</span> crew members aboard
                 </div>
                 <div id="joinedNames" style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin:15px 0;"></div>
                 <div class="setup-actions">
-                    <button class="btn btn-primary" id="beginPlacementBtn" onclick="beginShipPlacement()" disabled>
-                        🎯 BEGIN SHIP PLACEMENT
+                    <button class="btn btn-primary" id="randomizeBtn" onclick="randomizeTeams()" disabled>
+                        🎲 RANDOMIZE TEAMS
                     </button>
+                </div>
+                <!-- Team reveal after randomize -->
+                <div id="teamReveal" style="display:none;margin-top:20px;">
+                    <div style="display:flex;justify-content:center;gap:40px;flex-wrap:wrap;">
+                        <div>
+                            <div style="color:var(--team1);font-family:'Orbitron';font-size:1rem;margin-bottom:8px;" id="revealTeam1Name"></div>
+                            <div id="revealTeam1Players" style="display:flex;flex-wrap:wrap;gap:4px;justify-content:center;"></div>
+                        </div>
+                        <div>
+                            <div style="color:var(--team2);font-family:'Orbitron';font-size:1rem;margin-bottom:8px;" id="revealTeam2Name"></div>
+                            <div id="revealTeam2Players" style="display:flex;flex-wrap:wrap;gap:4px;justify-content:center;"></div>
+                        </div>
+                    </div>
+                    <div class="setup-actions" style="margin-top:20px;">
+                        <button class="btn btn-secondary" onclick="randomizeTeams()">🎲 RE-SHUFFLE</button>
+                        <button class="btn btn-primary" id="beginPlacementBtn" onclick="confirmTeamsAndBegin()">
+                            🎯 BEGIN SHIP PLACEMENT
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -3495,27 +3511,14 @@ var qrcode = function() {
         }
 
         function createGame() {
-            const namesText = document.getElementById('studentNames').value.trim();
-            if (!namesText) { alert('Please enter student names'); return; }
-
-            const names = namesText.split('\n').map(n => n.trim()).filter(n => n.length > 0);
-            if (names.length < 4) { alert('Need at least 4 students (2 per team)'); return; }
-
             const team1Name = document.getElementById('team1Name').value.trim() || 'Turbine Titans';
             const team2Name = document.getElementById('team2Name').value.trim() || 'Compressor Crew';
-
-            // Shuffle and split into teams
-            const shuffled = shuffleArray(names);
-            const mid = Math.ceil(shuffled.length / 2);
-            const team1 = shuffled.slice(0, mid);
-            const team2 = shuffled.slice(mid);
 
             roomCode = generateRoomCode();
             roomRef = db.ref('battleship/' + roomCode);
 
             // Prepare shuffled questions for this game
             const gameQuestions = shuffleArray(QUESTIONS).slice(0, 35).map((q, i) => {
-                // Shuffle answer options
                 const indices = [0, 1, 2, 3];
                 const shuffledIndices = shuffleArray(indices);
                 return {
@@ -3531,8 +3534,9 @@ var qrcode = function() {
                 phase: 'lobby',
                 team1Name: team1Name,
                 team2Name: team2Name,
-                team1Players: team1,
-                team2Players: team2,
+                team1Players: ['_empty'],
+                team2Players: ['_empty'],
+                players: { _init: true },
                 team1Joined: { _init: true },
                 team2Joined: { _init: true },
                 team1Ships: false,
@@ -3557,28 +3561,22 @@ var qrcode = function() {
             console.log('Creating room:', roomCode);
             roomRef.set(gameState).then(() => {
                 console.log('Room created successfully');
-                // Show room code
                 document.getElementById('roomCodeDisplay').style.display = 'inline-block';
                 document.getElementById('roomCodeText').textContent = roomCode;
                 document.getElementById('lobbyRoomCode').textContent = roomCode;
-                document.getElementById('totalCount').textContent = names.length;
 
-                // Switch to lobby
                 showScreen('lobbyScreen');
 
-                // Set join URL
-                const currentUrl = window.location.href.replace('host.html', 'student.html');
+                const currentUrl = window.location.href.split('?')[0].replace('host.html', 'student.html');
                 const joinFullUrl = currentUrl + '?room=' + roomCode;
                 document.getElementById('joinUrl').textContent = joinFullUrl;
 
-                // Generate QR code (pure JS, no external dependency)
                 generateQR(joinFullUrl, document.getElementById('qrCanvas'));
 
-                // Listen for joins
                 listenForUpdates();
             }).catch(err => {
                 console.error('Firebase write error:', err);
-                alert('Firebase error: ' + err.message + '\n\nMake sure your Realtime Database rules allow writes. Go to Firebase Console → Realtime Database → Rules and set:\n{\n  "rules": {\n    ".read": true,\n    ".write": true\n  }\n}');
+                alert('Firebase error: ' + err.message);
             });
         }
 
@@ -3597,37 +3595,90 @@ var qrcode = function() {
         function updateLobby() {
             if (gameData.phase !== 'lobby') return;
 
-            const t1JoinedObj = gameData.team1Joined || {};
-            const t2JoinedObj = gameData.team2Joined || {};
-            // Filter out the _init placeholder
-            const t1Names = Object.entries(t1JoinedObj).filter(([k,v]) => k !== '_init').map(([k,v]) => v);
-            const t2Names = Object.entries(t2JoinedObj).filter(([k,v]) => k !== '_init').map(([k,v]) => v);
-            const total = t1Names.length + t2Names.length;
-            const expected = (gameData.team1Players || []).length + (gameData.team2Players || []).length;
+            const playersObj = gameData.players || {};
+            const playerNames = Object.entries(playersObj).filter(([k,v]) => k !== '_init').map(([k,v]) => v);
+            const total = playerNames.length;
 
             document.getElementById('joinedCount').textContent = total;
-            document.getElementById('totalCount').textContent = expected;
 
             // Show joined names
             const container = document.getElementById('joinedNames');
             container.innerHTML = '';
 
-            const allJoined = [
-                ...t1Names.map(n => ({name: n, team: 1})),
-                ...t2Names.map(n => ({name: n, team: 2}))
-            ];
-
-            allJoined.forEach(p => {
+            playerNames.forEach(name => {
                 const chip = document.createElement('span');
                 chip.className = 'roster-chip';
-                chip.style.borderColor = p.team === 1 ? 'var(--team1)' : 'var(--team2)';
-                chip.style.color = p.team === 1 ? 'var(--team1)' : 'var(--team2)';
-                chip.textContent = p.name;
+                chip.style.borderColor = 'var(--accent-cyan)';
+                chip.style.color = 'var(--accent-cyan)';
+                chip.textContent = name;
                 container.appendChild(chip);
             });
 
-            // Enable start button if enough players
-            document.getElementById('beginPlacementBtn').disabled = total < 2;
+            // Enable randomize button if enough players
+            document.getElementById('randomizeBtn').disabled = total < 4;
+        }
+
+        function randomizeTeams() {
+            const playersObj = gameData.players || {};
+            const playerNames = Object.entries(playersObj).filter(([k,v]) => k !== '_init').map(([k,v]) => v);
+
+            if (playerNames.length < 4) { alert('Need at least 4 players'); return; }
+
+            const shuffled = shuffleArray(playerNames);
+            const mid = Math.ceil(shuffled.length / 2);
+            const team1 = shuffled.slice(0, mid);
+            const team2 = shuffled.slice(mid);
+
+            // Store temporarily for display
+            window._pendingTeam1 = team1;
+            window._pendingTeam2 = team2;
+
+            // Show team reveal
+            document.getElementById('teamReveal').style.display = 'block';
+            document.getElementById('randomizeBtn').style.display = 'none';
+
+            document.getElementById('revealTeam1Name').textContent = gameData.team1Name;
+            document.getElementById('revealTeam2Name').textContent = gameData.team2Name;
+
+            const t1Container = document.getElementById('revealTeam1Players');
+            const t2Container = document.getElementById('revealTeam2Players');
+            t1Container.innerHTML = '';
+            t2Container.innerHTML = '';
+
+            team1.forEach(name => {
+                const chip = document.createElement('span');
+                chip.className = 'roster-chip';
+                chip.style.borderColor = 'var(--team1)';
+                chip.style.color = 'var(--team1)';
+                chip.textContent = name;
+                t1Container.appendChild(chip);
+            });
+
+            team2.forEach(name => {
+                const chip = document.createElement('span');
+                chip.className = 'roster-chip';
+                chip.style.borderColor = 'var(--team2)';
+                chip.style.color = 'var(--team2)';
+                chip.textContent = name;
+                t2Container.appendChild(chip);
+            });
+        }
+
+        function confirmTeamsAndBegin() {
+            const team1 = window._pendingTeam1;
+            const team2 = window._pendingTeam2;
+            if (!team1 || !team2) { alert('Randomize teams first'); return; }
+
+            // Write teams to Firebase and move to placement
+            roomRef.update({
+                team1Players: team1,
+                team2Players: team2,
+                phase: 'placement'
+            }).then(() => {
+                showScreen('placementScreen');
+                document.getElementById('team1PlaceName').textContent = gameData.team1Name;
+                document.getElementById('team2PlaceName').textContent = gameData.team2Name;
+            });
         }
 
         function beginShipPlacement() {
