@@ -122,6 +122,7 @@
             gap: 30px;
             padding: 10px 0;
             margin-bottom: 10px;
+            position: relative;
         }
 
         .turn-indicator {
@@ -1011,6 +1012,16 @@
             <div class="status-bar">
                 <div class="turn-indicator team1" id="turnIndicator">TURBINE TITANS' TURN</div>
                 <div class="phase-label" id="phaseLabel">SELECT TARGET</div>
+                <button id="unstickBtn" onclick="unstickGame()" title="Force next turn (use if game is stuck)" style="
+                    position:absolute; right:12px; top:50%; transform:translateY(-50%);
+                    background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.15);
+                    color:var(--text-secondary); font-size:0.7rem; padding:4px 10px;
+                    border-radius:4px; cursor:pointer; font-family:'Share Tech Mono',monospace;
+                    transition:all 0.2s;
+                " onmouseover="this.style.borderColor='var(--accent-yellow)';this.style.color='var(--accent-yellow)';"
+                   onmouseout="this.style.borderColor='rgba(255,255,255,0.15)';this.style.color='var(--text-secondary)';">
+                    🔧 UNSTICK
+                </button>
             </div>
 
             <div class="battle-area">
@@ -3798,6 +3809,7 @@ var qrcode = function() {
 
         function handleCellClick(gridId, row, col) {
             if (!gameData || gameData.phase !== 'battle') return;
+            if (battleLocked) return; // Don't allow selection during question/result
 
             // Determine which grid is the target (enemy) grid
             const attackingTeam = gameData.currentTurn;
@@ -3839,8 +3851,31 @@ var qrcode = function() {
             }
         }
 
+        let battleLocked = false;
+        let battleLockTimer = null;
+
+        function setBattleLock(locked) {
+            battleLocked = locked;
+            if (battleLockTimer) { clearTimeout(battleLockTimer); battleLockTimer = null; }
+            if (locked) {
+                // Safety net: if locked for more than 30s, something went wrong — unlock and advance
+                battleLockTimer = setTimeout(() => {
+                    console.warn('Battle lock safety net triggered — forcing unlock and next turn');
+                    battleLocked = false;
+                    questionResolved = false;
+                    clearInterval(timerInterval);
+                    if (responseListener) { roomRef.child('responses').off('value', responseListener); responseListener = null; }
+                    document.getElementById('questionCard').style.display = 'none';
+                    document.getElementById('responseTracker').style.display = 'none';
+                    hideShotResult();
+                    nextTurn();
+                }, 30000);
+            }
+        }
+
         function fireShot() {
-            if (!selectedCoord) return;
+            if (!selectedCoord || battleLocked) return;
+            setBattleLock(true);
 
             document.getElementById('fireBtn').disabled = true;
             document.getElementById('targetCoordDisplay').style.display = 'none';
@@ -3865,6 +3900,7 @@ var qrcode = function() {
         }
 
         function showQuestion(qIndex) {
+            questionResolved = false;
             const q = gameData.questions[qIndex];
             if (!q) return;
 
@@ -3910,12 +3946,14 @@ var qrcode = function() {
         }
 
         let responseListener = null;
+        let questionResolved = false;
 
         function listenForResponses(qIndex) {
             if (responseListener) roomRef.child('responses').off('value', responseListener);
 
             responseListener = roomRef.child('responses').on('value', snap => {
                 try {
+                    if (questionResolved) return;
                     const responses = snap.val() || {};
                     const attackingTeam = gameData.currentTurn;
                     const players = (attackingTeam === 1 ? gameData.team1Players : gameData.team2Players) || [];
@@ -3945,7 +3983,10 @@ var qrcode = function() {
 
                     // Check if all answered
                     if (realPlayers.length > 0 && answeredCount >= realPlayers.length) {
+                        if (questionResolved) return;
+                        questionResolved = true;
                         clearInterval(timerInterval);
+                        if (responseListener) { roomRef.child('responses').off('value', responseListener); responseListener = null; }
                         setTimeout(() => revealAnswerAndResolve(qIndex, correctCount, answeredCount), 800);
                     }
                 } catch(e) {
@@ -3971,25 +4012,35 @@ var qrcode = function() {
 
                 if (timeLeft <= 0) {
                     clearInterval(timerInterval);
-                    // Time's up - resolve with current responses
-                    const responses = gameData.responses || {};
-                    const attackingTeam = gameData.currentTurn;
-                    const players = (attackingTeam === 1 ? gameData.team1Players : gameData.team2Players) || [];
-                    const realPlayers = players.filter(p => p !== '_empty');
-                    const q = gameData.questions[gameData.currentQuestion];
-                    if (!q) return;
+                    if (questionResolved) return;
+                    questionResolved = true;
+                    if (responseListener) { roomRef.child('responses').off('value', responseListener); responseListener = null; }
 
-                    let correctCount = 0;
-                    let answeredCount = 0;
-                    Object.entries(responses).forEach(([name, answer]) => {
-                        if (name === '_init') return;
-                        if (realPlayers.includes(name)) {
-                            answeredCount++;
-                            if (answer === q.correct) correctCount++;
-                        }
+                    // Read fresh responses from Firebase, not stale gameData
+                    roomRef.child('responses').once('value').then(snap => {
+                        const responses = snap.val() || {};
+                        const attackingTeam = gameData.currentTurn;
+                        const players = (attackingTeam === 1 ? gameData.team1Players : gameData.team2Players) || [];
+                        const realPlayers = players.filter(p => p !== '_empty');
+                        const qIdx = gameData.currentQuestion;
+                        const q = gameData.questions[qIdx];
+                        if (!q) { resolveShot(false); return; }
+
+                        let correctCount = 0;
+                        let answeredCount = 0;
+                        Object.entries(responses).forEach(([name, answer]) => {
+                            if (name === '_init') return;
+                            if (realPlayers.includes(name)) {
+                                answeredCount++;
+                                if (answer === q.correct) correctCount++;
+                            }
+                        });
+
+                        revealAnswerAndResolve(qIdx, correctCount, answeredCount || realPlayers.length);
+                    }).catch(e => {
+                        console.error('Timer response read error:', e);
+                        revealAnswerAndResolve(gameData.currentQuestion, 0, 1);
                     });
-
-                    revealAnswerAndResolve(gameData.currentQuestion, correctCount, answeredCount || realPlayers.length);
                 }
             }, 1000);
         }
@@ -4022,7 +4073,12 @@ var qrcode = function() {
 
         function resolveShot(shotFires) {
             const coord = gameData.targetCoord || selectedCoord;
-            if (!coord) return;
+            if (!coord || coord === false) {
+                console.error('resolveShot: no coord available, advancing turn');
+                showShotResult('WASTED', 'Error — no target selected');
+                setTimeout(() => { hideShotResult(); nextTurn(); }, 2500);
+                return;
+            }
 
             const attackingTeam = gameData.currentTurn;
             const targetTeam = attackingTeam === 1 ? 2 : 1;
@@ -4132,6 +4188,7 @@ var qrcode = function() {
                 const updatedSunkRaw = (targetTeam === 1 ? (updates.team1Sunk || gameData.team1Sunk) : (updates.team2Sunk || gameData.team2Sunk)) || [];
                 const updatedSunk = Array.isArray(updatedSunkRaw) ? updatedSunkRaw.filter(s => s !== '_none') : [];
                 if (updatedSunk.length >= 5) {
+                    setBattleLock(false);
                     roomRef.update({ phase: 'victory', winner: attackingTeam });
                 } else {
                     nextTurn();
@@ -4142,8 +4199,42 @@ var qrcode = function() {
         }
 
         function nextTurn() {
+            setBattleLock(false);
+            selectedCoord = null;
+            questionResolved = false;
             const next = gameData.currentTurn === 1 ? 2 : 1;
             roomRef.update({ currentTurn: next });
+            document.getElementById('fireBtn').disabled = true;
+            document.getElementById('phaseLabel').textContent = 'SELECT TARGET';
+        }
+
+        function unstickGame() {
+            console.warn('Manual unstick triggered');
+            // Kill all pending timers and listeners
+            clearInterval(timerInterval);
+            if (responseListener) { roomRef.child('responses').off('value', responseListener); responseListener = null; }
+
+            // Hide all overlays
+            document.getElementById('questionCard').style.display = 'none';
+            document.getElementById('responseTracker').style.display = 'none';
+            hideShotResult();
+
+            // Clear Firebase question state
+            roomRef.update({
+                currentQuestion: false,
+                targetCoord: false,
+                responses: { _init: true }
+            });
+
+            // Reset local state and advance turn
+            questionResolved = false;
+            selectedCoord = null;
+            setBattleLock(false);
+
+            // Switch to next team's turn
+            const next = gameData.currentTurn === 1 ? 2 : 1;
+            roomRef.update({ currentTurn: next });
+            document.getElementById('fireBtn').disabled = true;
             document.getElementById('phaseLabel').textContent = 'SELECT TARGET';
         }
 
