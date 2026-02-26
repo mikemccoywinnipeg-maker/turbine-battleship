@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Turbine Fuel system Battleship — Host</title>
+    <title>Turbine Battleship — Host</title>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -3582,13 +3582,24 @@ var qrcode = function() {
 
         function listenForUpdates() {
             roomRef.on('value', snap => {
-                gameData = snap.val();
-                if (!gameData) return;
+                try {
+                    gameData = snap.val();
+                    if (!gameData) return;
 
-                updateLobby();
-                updatePlacementStatus();
-                updateBattleDisplay();
-                checkVictory();
+                    updateLobby();
+                    updatePlacementStatus();
+                    updateBattleDisplay();
+                    checkVictory();
+                } catch(e) {
+                    console.error('Update error (non-fatal):', e);
+                }
+            }, err => {
+                console.error('Firebase listener error:', err);
+                // Reconnect after 2 seconds
+                setTimeout(() => {
+                    console.log('Reconnecting listener...');
+                    listenForUpdates();
+                }, 2000);
             });
         }
 
@@ -3601,7 +3612,7 @@ var qrcode = function() {
 
             document.getElementById('joinedCount').textContent = total;
 
-            // Show joined names
+            // Show joined names with kick buttons
             const container = document.getElementById('joinedNames');
             container.innerHTML = '';
 
@@ -3610,12 +3621,38 @@ var qrcode = function() {
                 chip.className = 'roster-chip';
                 chip.style.borderColor = 'var(--accent-cyan)';
                 chip.style.color = 'var(--accent-cyan)';
-                chip.textContent = name;
+                chip.style.display = 'inline-flex';
+                chip.style.alignItems = 'center';
+                chip.style.gap = '6px';
+
+                const nameSpan = document.createElement('span');
+                nameSpan.textContent = name;
+                chip.appendChild(nameSpan);
+
+                const kickBtn = document.createElement('span');
+                kickBtn.textContent = '✕';
+                kickBtn.style.cursor = 'pointer';
+                kickBtn.style.opacity = '0.5';
+                kickBtn.style.fontSize = '0.6rem';
+                kickBtn.title = 'Remove ' + name;
+                kickBtn.onmouseover = () => { kickBtn.style.opacity = '1'; kickBtn.style.color = '#ff2d55'; };
+                kickBtn.onmouseout = () => { kickBtn.style.opacity = '0.5'; kickBtn.style.color = ''; };
+                kickBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    removePlayer(name);
+                };
+                chip.appendChild(kickBtn);
+
                 container.appendChild(chip);
             });
 
             // Enable randomize button if enough players
             document.getElementById('randomizeBtn').disabled = total < 4;
+        }
+
+        function removePlayer(name) {
+            if (!confirm('Remove ' + name + ' from the game?')) return;
+            roomRef.child('players').child(name).remove();
         }
 
         function randomizeTeams() {
@@ -3878,34 +3915,41 @@ var qrcode = function() {
             if (responseListener) roomRef.child('responses').off('value', responseListener);
 
             responseListener = roomRef.child('responses').on('value', snap => {
-                const responses = snap.val() || {};
-                const attackingTeam = gameData.currentTurn;
-                const players = attackingTeam === 1 ? gameData.team1Players : gameData.team2Players;
-                const q = gameData.questions[qIndex];
+                try {
+                    const responses = snap.val() || {};
+                    const attackingTeam = gameData.currentTurn;
+                    const players = (attackingTeam === 1 ? gameData.team1Players : gameData.team2Players) || [];
+                    const realPlayers = players.filter(p => p !== '_empty');
+                    const q = gameData.questions[qIndex];
+                    if (!q) return;
 
-                let answeredCount = 0;
-                let correctCount = 0;
+                    let answeredCount = 0;
+                    let correctCount = 0;
 
-                Object.entries(responses).forEach(([playerName, answer]) => {
-                    const playerIndex = (players || []).indexOf(playerName);
-                    if (playerIndex === -1) return;
+                    Object.entries(responses).forEach(([name, answer]) => {
+                        if (name === '_init') return;
+                        const playerIndex = realPlayers.indexOf(name);
+                        if (playerIndex === -1) return;
 
-                    answeredCount++;
-                    const isCorrect = answer === q.correct;
-                    if (isCorrect) correctCount++;
+                        answeredCount++;
+                        const isCorrect = answer === q.correct;
+                        if (isCorrect) correctCount++;
 
-                    const dot = document.getElementById(`dot-${playerIndex}`);
-                    if (dot) {
-                        dot.className = `response-dot ${isCorrect ? 'answered-correct' : 'answered-wrong'}`;
+                        const dot = document.getElementById(`dot-${playerIndex}`);
+                        if (dot) {
+                            dot.className = `response-dot ${isCorrect ? 'answered-correct' : 'answered-wrong'}`;
+                        }
+                    });
+
+                    document.getElementById('answeredCount').textContent = answeredCount;
+
+                    // Check if all answered
+                    if (realPlayers.length > 0 && answeredCount >= realPlayers.length) {
+                        clearInterval(timerInterval);
+                        setTimeout(() => revealAnswerAndResolve(qIndex, correctCount, answeredCount), 800);
                     }
-                });
-
-                document.getElementById('answeredCount').textContent = answeredCount;
-
-                // Check if all answered
-                if (answeredCount >= (players || []).length) {
-                    clearInterval(timerInterval);
-                    setTimeout(() => revealAnswerAndResolve(qIndex, correctCount, answeredCount), 800);
+                } catch(e) {
+                    console.error('Response tracking error:', e);
                 }
             });
         }
@@ -3930,19 +3974,22 @@ var qrcode = function() {
                     // Time's up - resolve with current responses
                     const responses = gameData.responses || {};
                     const attackingTeam = gameData.currentTurn;
-                    const players = attackingTeam === 1 ? gameData.team1Players : gameData.team2Players;
+                    const players = (attackingTeam === 1 ? gameData.team1Players : gameData.team2Players) || [];
+                    const realPlayers = players.filter(p => p !== '_empty');
                     const q = gameData.questions[gameData.currentQuestion];
+                    if (!q) return;
 
                     let correctCount = 0;
                     let answeredCount = 0;
                     Object.entries(responses).forEach(([name, answer]) => {
-                        if ((players || []).includes(name)) {
+                        if (name === '_init') return;
+                        if (realPlayers.includes(name)) {
                             answeredCount++;
                             if (answer === q.correct) correctCount++;
                         }
                     });
 
-                    revealAnswerAndResolve(gameData.currentQuestion, correctCount, answeredCount || (players || []).length);
+                    revealAnswerAndResolve(gameData.currentQuestion, correctCount, answeredCount || realPlayers.length);
                 }
             }, 1000);
         }
@@ -4181,6 +4228,7 @@ var qrcode = function() {
             // Apply shots
             if (gameData.shotHistory) {
                 Object.entries(gameData.shotHistory).forEach(([key, shot]) => {
+                    if (key === '_init' || !shot || !shot.targetTeam) return;
                     const targetGrid = shot.targetTeam === 1 ? 'grid1' : 'grid2';
                     const cell = document.getElementById(`${targetGrid}-${shot.row}-${shot.col}`);
                     if (cell) {
@@ -4245,7 +4293,7 @@ var qrcode = function() {
                 const container = document.getElementById(`team${team}Roster`);
                 container.innerHTML = '';
                 const players = team === 1 ? gameData.team1Players : gameData.team2Players;
-                (players || []).forEach(name => {
+                (players || []).filter(n => n !== '_empty').forEach(name => {
                     const chip = document.createElement('span');
                     chip.className = 'roster-chip';
                     chip.textContent = name;

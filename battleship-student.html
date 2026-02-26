@@ -108,6 +108,7 @@
     </style>
 </head>
 <body>
+<div id="connectionBanner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:9999;background:#ff2d55;color:white;text-align:center;padding:8px;font-family:'Share Tech Mono',monospace;font-size:0.8rem;">⚠ Connection lost — reconnecting...</div>
 <div class="container">
     <div class="student-header">
         <h1>TURBINE BATTLESHIP</h1>
@@ -130,16 +131,24 @@
         </div>
     </div>
     <script>
-    // Auto-fill room code from URL - runs immediately
+    // Auto-fill room code from URL and auto-rejoin if returning
     (function() {
         try {
             var params = new URLSearchParams(window.location.search);
             var room = params.get('room');
+            var name = params.get('name');
+
             if (room) {
                 document.getElementById('roomInput').value = room;
                 document.getElementById('roomInputWrap').style.display = 'none';
                 document.getElementById('roomBadge').style.display = 'block';
                 document.getElementById('roomBadge').textContent = 'ROOM: ' + room;
+            }
+
+            if (room && name) {
+                // Returning player — auto-fill name and trigger rejoin after Firebase loads
+                document.getElementById('nameInput').value = decodeURIComponent(name);
+                window._autoRejoin = true;
             }
         } catch(e) { console.log('Auto-fill error:', e); }
     })();
@@ -236,19 +245,41 @@
     let selectedShipIndex = -1, orientation = 'horizontal', placedShips = [];
     let hasSubmittedAnswer = false, currentQuestionIndex = -1, studentTimerInterval = null;
 
+    // Auto-rejoin if returning player (room + name in URL)
+    if (window._autoRejoin) {
+        setTimeout(() => {
+            console.log('Auto-rejoining...');
+            joinGame();
+        }, 500);
+    }
+
     // ========== JOIN ==========
     function joinGame() {
         roomCode = document.getElementById('roomInput').value.trim().toUpperCase();
-        playerName = document.getElementById('nameInput').value.trim();
-        if (!roomCode || !playerName) { alert('Enter room code and your name'); return; }
+        let rawName = document.getElementById('nameInput').value.trim();
+        // Normalize: collapse whitespace, title case
+        rawName = rawName.replace(/\s+/g, ' ');
+        if (!roomCode || !rawName) { alert('Enter room code and your name'); return; }
+        playerName = rawName;
 
         roomRef = db.ref('battleship/' + roomCode);
         roomRef.once('value').then(snap => {
             gameData = snap.val();
             if (!gameData) { alert('Room not found!'); return; }
 
-            // Register in the players list
+            // Check if name already exists (case-insensitive) — use existing casing if so
+            const existingPlayers = gameData.players || {};
+            const existingKey = Object.keys(existingPlayers).find(k => k !== '_init' && k.toLowerCase() === playerName.toLowerCase());
+            if (existingKey) {
+                playerName = existingKey; // Use the original casing
+            }
+
+            // Register in the players list (same key = overwrite, no duplicate)
             roomRef.child('players').child(playerName).set(playerName);
+
+            // Store in URL so page refresh auto-rejoins
+            const newUrl = window.location.pathname + '?room=' + roomCode + '&name=' + encodeURIComponent(playerName);
+            window.history.replaceState({}, '', newUrl);
 
             document.getElementById('studentInfo').textContent = playerName;
 
@@ -262,10 +293,29 @@
 
     function listenForUpdates() {
         roomRef.on('value', snap => {
-            const prev = gameData;
-            gameData = snap.val();
-            if (!gameData) return;
-            handlePhaseChange(prev);
+            try {
+                const prev = gameData;
+                gameData = snap.val();
+                if (!gameData) return;
+                handlePhaseChange(prev);
+            } catch(e) {
+                console.error('Update error (non-fatal):', e);
+            }
+        }, err => {
+            console.error('Firebase listener error:', err);
+            setTimeout(() => {
+                console.log('Reconnecting...');
+                listenForUpdates();
+            }, 2000);
+        });
+
+        // Monitor connection state — show warning if disconnected
+        firebase.database().ref('.info/connected').on('value', snap => {
+            const connected = snap.val();
+            const banner = document.getElementById('connectionBanner');
+            if (banner) {
+                banner.style.display = connected ? 'none' : 'block';
+            }
         });
     }
 
